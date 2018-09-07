@@ -1,0 +1,1 @@
+--with-target-bits=64 --with-boot-jdk=/usr/lib/jvm/java-7-openjdk-amd64 --with-debug-level=slowdebug --enable-debug-symbols ZIP_DEBUGINFO_FILES=0
