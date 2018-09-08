@@ -676,18 +676,23 @@ bool ParallelCompactData::summarize(SplitInfo& split_info,
   const size_t end_region = addr_to_region_idx(region_align_up(source_end));
   
   // TODO
-  
   pid_t raw_pid = getpid();
   int pid = (int) raw_pid;
-  char *temp_beg = (char *) source_beg;
   size_t RegionSize = ParallelCompactData::RegionSize;
-
+#if 0
+  char *temp_beg = (char *) source_beg;
   cal_swpness(pid, temp_beg, RegionSize);
+#endif
 
   HeapWord *dest_addr = target_beg;
   while (cur_region < end_region) {
     // The destination must be set even if the region has no data.
     _region_data[cur_region].set_destination(dest_addr);
+
+    // TODO
+    HeapWord *cur_beg = region_to_addr(cur_region);
+    char *temp_beg = (char *) cur_beg;
+    cal_swpness(pid, temp_beg, RegionSize);
 
     size_t words = _region_data[cur_region].data_size();
     if (words > 0) {
