@@ -39,6 +39,7 @@
 #include "utilities/dtrace.hpp"
 #include "utilities/events.hpp"
 #include "utilities/xmlstream.hpp"
+#include <syscall.h>
 
 #ifndef USDT2
 HS_DTRACE_PROBE_DECL3(hotspot, vmops__request, char *, uintptr_t, int);
@@ -588,7 +589,8 @@ void VMThread::loop() {
 
 void VMThread::execute(VM_Operation* op) {
   Thread* t = Thread::current();
-
+//added by charlie 0909
+	int tid = syscall(SYS_gettid);
   if (!t->is_VM_thread()) {
     SkipGCALot sgcalot(t);    // avoid re-entrant attempts to gc-a-lot
     // JavaThread or WatcherThread
@@ -605,6 +607,7 @@ void VMThread::execute(VM_Operation* op) {
 
     // Setup VM_operations for execution
     op->set_calling_thread(t, Thread::get_priority(t));
+	op->_call_tid = tid;
 
     // It does not make sense to execute the epilogue, if the VM operation object is getting
     // deallocated by the VM thread.

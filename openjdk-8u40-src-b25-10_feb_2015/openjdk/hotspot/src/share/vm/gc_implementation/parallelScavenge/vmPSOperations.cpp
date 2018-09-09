@@ -47,7 +47,9 @@ void VM_ParallelGCFailedAllocation::doit() {
   assert(heap->kind() == CollectedHeap::ParallelScavengeHeap, "must be a ParallelScavengeHeap");
 
   GCCauseSetter gccs(heap, _gc_cause);
-  _result = heap->failed_mem_allocate(_size);
+  //added by charlie 0909
+ // _result = heap->failed_mem_allocate(_size);
+  _result = heap->failed_mem_allocate(_size, this->_call_tid);
 
   if (_result == NULL && GC_locker::is_active_and_needs_gc()) {
     set_gc_locked();

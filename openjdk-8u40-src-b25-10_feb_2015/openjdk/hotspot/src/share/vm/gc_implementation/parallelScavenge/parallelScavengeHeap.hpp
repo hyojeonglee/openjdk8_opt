@@ -159,6 +159,8 @@ class ParallelScavengeHeap : public CollectedHeap {
   // to allocate a new TLAB as this allocation might be satisfied out
   // of the old generation.
   HeapWord* failed_mem_allocate(size_t size);
+  //added by charlie 0909
+  HeapWord* failed_mem_allocate(size_t size, int calling_tid);
 
   // Support for System.gc()
   void collect(GCCause::Cause cause);
@@ -174,6 +176,8 @@ class ParallelScavengeHeap : public CollectedHeap {
 
   // Perform a full collection
   virtual void do_full_collection(bool clear_all_soft_refs);
+  //added by charlie 0909
+  virtual void do_full_collection(bool clear_all_soft_refs, int tid);
 
   bool supports_inline_contig_alloc() const { return !UseNUMA; }
 

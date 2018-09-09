@@ -429,13 +429,26 @@ void ParallelScavengeHeap::do_full_collection(bool clear_all_soft_refs) {
   }
 }
 
+//added by charlie 0909
+void ParallelScavengeHeap::do_full_collection(bool clear_all_soft_refs, int tid) {
+  if (UseParallelOldGC) {
+    // The do_full_collection() parameter clear_all_soft_refs
+    // is interpreted here as maximum_compaction which will
+    // cause SoftRefs to be cleared.
+    bool maximum_compaction = clear_all_soft_refs;
+    PSParallelCompact::invoke(maximum_compaction, tid);
+  } else {
+    PSMarkSweep::invoke(clear_all_soft_refs);
+  }
+}
+
 // Failed allocation policy. Must be called from the VM thread, and
 // only at a safepoint! Note that this method has policy for allocation
 // flow, and NOT collection policy. So we do not check for gc collection
 // time over limit here, that is the responsibility of the heap specific
 // collection methods. This method decides where to attempt allocations,
 // and when to attempt collections, but no collection specific policy.
-HeapWord* ParallelScavengeHeap::failed_mem_allocate(size_t size) {
+HeapWord* ParallelScavengeHeap::failed_mem_allocate(size_t size, int calling_tid) {
   assert(SafepointSynchronize::is_at_safepoint(), "should be at safepoint");
   assert(Thread::current() == (Thread*)VMThread::vm_thread(), "should be in vm thread");
   assert(!Universe::heap()->is_gc_active(), "not reentrant");
@@ -451,7 +464,7 @@ HeapWord* ParallelScavengeHeap::failed_mem_allocate(size_t size) {
   // Second level allocation failure.
   //   Mark sweep and allocate in young generation.
   if (result == NULL && !invoked_full_gc) {
-    do_full_collection(false);
+    do_full_collection(false, calling_tid);
     result = young_gen()->allocate(size);
   }
 
