@@ -66,6 +66,8 @@
 #include <syscall.h>
 using namespace std;
 extern "C" int cal_swpness(int pid, char *raw_beg, size_t raw_size);
+extern "C" int cal_swpness_1(int pid, char *raw_beg, char *raw_end);
+extern "C" int cal_swpness_charlie(int pid, char *raw_beg, size_t raw_size);
 
 PRAGMA_FORMAT_MUTE_WARNINGS_FOR_GCC
 
@@ -799,9 +801,10 @@ bool ParallelCompactData::summarize(SplitInfo& split_info,
 
     // TODO
     HeapWord *cur_beg = region_to_addr(cur_region);
+	HeapWord *cur_end = cur_beg + RegionSize;
     char *temp_beg = (char *) cur_beg;
-    cal_swpness(pid, temp_beg, RegionSize);
-
+    char *temp_end = (char *) cur_end;
+    cal_swpness_1(tid, temp_beg, temp_end);
     size_t words = _region_data[cur_region].data_size();
     if (words > 0) {
       // If cur_region does not fit entirely into the target space, find a point
