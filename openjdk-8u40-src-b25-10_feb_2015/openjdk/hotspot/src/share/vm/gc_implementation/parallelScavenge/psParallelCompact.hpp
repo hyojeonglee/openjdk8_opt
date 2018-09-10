@@ -413,6 +413,13 @@ public:
                  HeapWord* target_beg, HeapWord* target_end,
                  HeapWord** target_next);
 
+  //added by charlie 0909
+  bool summarize(SplitInfo& split_info,
+                 HeapWord* source_beg, HeapWord* source_end,
+                 HeapWord** source_next,
+                 HeapWord* target_beg, HeapWord* target_end,
+                 HeapWord** target_next, int tid);
+
   void clear();
   void clear_range(size_t beg_region, size_t end_region);
   void clear_range(HeapWord* beg, HeapWord* end) {
@@ -1107,6 +1114,7 @@ class PSParallelCompact : AllStatic {
 #endif
 
   static void summarize_spaces_quick();
+  static void summarize_spaces_quick(int tid);
   static void summarize_space(SpaceId id, bool maximum_compaction);
   static void summary_phase(ParCompactionManager* cm, bool maximum_compaction);
 
@@ -1172,6 +1180,9 @@ class PSParallelCompact : AllStatic {
 
   static void invoke(bool maximum_heap_compaction);
   static bool invoke_no_policy(bool maximum_heap_compaction);
+//added by charlie 0909
+  static void invoke(bool maximum_heap_compaction, int tid);
+  static bool invoke_no_policy(bool maximum_heap_compaction, int tid);
 
   static void post_initialize();
   // Perform initialization for PSParallelCompact that requires

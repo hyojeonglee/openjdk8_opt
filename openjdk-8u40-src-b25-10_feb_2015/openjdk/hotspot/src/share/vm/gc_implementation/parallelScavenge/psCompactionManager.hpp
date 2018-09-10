@@ -51,6 +51,8 @@ class ParCompactionManager : public CHeapObj<mtGC> {
   friend class IdleGCTask;
 
  public:
+//added by charlie
+int tid;
 
 // ------------------------  Don't putback if not needed
   // Actions that the compaction manager should take.
