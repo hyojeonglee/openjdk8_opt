@@ -58,6 +58,7 @@ int cal_swpness(int pid, char *raw_beg, size_t raw_size)
 	int pmapf, kpflgf;
 	int tot_cnt = 0;
 	int swp_cnt = 0;
+	int out_of_lru = 0;
 
 	sprintf(pmap_path, "/proc/%d/pagemap", pid);
 	pmapf = open(pmap_path, O_RDONLY);
@@ -74,10 +75,10 @@ int cal_swpness(int pid, char *raw_beg, size_t raw_size)
 	u8 start_va = beg;
 
 	// TODO: Is it true? (below)
-	// u8 reg_size = size / (u8) 512;
-	// u8 end_va = start_va + reg_size;
-	u8 end_va = start_va + size;
+	// size(word) to byte 
+	u8 end_va = start_va + size*2;
 
+	// there are 32 pages in one region.
 	for (vaddr = start_va; vaddr < end_va; vaddr += BASE_PAGE_SIZE) {
 		u8 ent, pfn = 0;
 		u8 kpflags;
@@ -89,8 +90,10 @@ int cal_swpness(int pid, char *raw_beg, size_t raw_size)
 			// printf("ok1\n");
 			pfn = PAGEMAP_PFN(ent);
 			// printf("ok2\n");
-			if (pfn == 0)
+			if (pfn == 0) {
+				printf("pfn is 0!\n");
 				continue;
+			}
 		} else {
 			// TODO: error handling
 			printf("Fail to read pagemaps file!\n");
@@ -98,11 +101,14 @@ int cal_swpness(int pid, char *raw_beg, size_t raw_size)
 		// printf("ok3\n");	
 		lseek(kpflgf, pfn * 8, SEEK_SET);
 		if (read(kpflgf, &kpflags, 8) == 8) {
-			if (IN_LRU(kpflags) == 0)
+			if (IN_LRU(kpflags) == 0) {
+				out_of_lru++;
 				continue;
+			}
 			if (IS_HUGE(kpflags) == 1) {
 				vaddr += HUGE_PAGE_SIZE -
 					BASE_PAGE_SIZE;
+				printf("Huge!\n");
 			}
 			// Increase swp obj counter
 			if (IS_SWP(kpflags) == 1)
@@ -118,11 +124,12 @@ int cal_swpness(int pid, char *raw_beg, size_t raw_size)
 	close(kpflgf);
 
 	// Summarize swapness (swapped pages / total pages in LRU list)
+	printf("out of lru: %d\n", out_of_lru);
 	if (tot_cnt != 0) {
 		printf("swp / tot: %d / %d\n", swp_cnt, tot_cnt);
 		printf("Swappiness: %f\n", (double) swp_cnt / (double) tot_cnt);
 	} else if (swp_cnt == 0) {
-		printf("Swapped pages is Zero!\n");
+		printf("Swapped pages is Zero! Total pages is %d\n", tot_cnt);
 	} else {
 		printf("total_count is Zero!\n");
 	}
