@@ -213,13 +213,13 @@ int cal_swpness_1(int pid, char *raw_beg, char *raw_end)
 		if (read(pmapf, &ent, 8) == 8) {
 			pfn = PAGEMAP_PFN(ent);
 			if (pfn == 0) {
-				printf("pfn is 0!\n");
+				printf("[module-warning] pfn is 0!\n");
 				continue;
 			}
 			is_swapped = GET_BIT(ent, 62);
 			is_present = GET_BIT(ent, 63);
 			swap_type = PAGEMAP_SWAPTYPE(ent);
-			printf("is_swapped %llu, is_present %llu\n",is_swapped, is_present);
+			// printf("is_swapped %llu, is_present %llu\n",is_swapped, is_present);
 		} else {
 			// TODO: error handling
 			printf("Fail to read pagemaps file!\n");
@@ -227,7 +227,7 @@ int cal_swpness_1(int pid, char *raw_beg, char *raw_end)
 		}
 		lseek(kpflgf, pfn * 8, SEEK_SET);
 		if (read(kpflgf, &kpflags, 8) == 8) {
-			printf("Result: 0x%llx\n",(unsigned long long )kpflags);
+			// printf("Result: 0x%llx\n",(unsigned long long )kpflags);
 			if (IN_LRU(kpflags) == 0) {
 				out_of_lru++;
 				continue;
@@ -235,7 +235,7 @@ int cal_swpness_1(int pid, char *raw_beg, char *raw_end)
 			if (IS_HUGE(kpflags) == 1) {
 				vaddr += HUGE_PAGE_SIZE -
 					BASE_PAGE_SIZE;
-				printf("Huge!\n");
+				// printf("Huge!\n");
 			}
 			// Increase swp obj counter
 			if (IS_SWP(kpflags) == 1)
@@ -250,16 +250,17 @@ int cal_swpness_1(int pid, char *raw_beg, char *raw_end)
 	close(kpflgf);
 
 	// Summarize swapness (swapped pages / total pages in LRU list)
-	printf("[module] out of lru: %d\n", out_of_lru);
+	printf("[module-warning] out of lru: %d\n", out_of_lru);
 	if (tot_cnt != 0) {
-		printf("[module] swp / tot: %d / %d\n", swp_cnt, tot_cnt);
+		printf("[module-info] (Case 1) swp / tot: %d / %d\n", swp_cnt, tot_cnt);
 		printf("> Swappiness: %f\n", (double) swp_cnt / (double) tot_cnt);
 	} else if (swp_cnt == 0) {
-		printf("[module] Swapped pages is Zero! Total pages is %d\n", tot_cnt);
+		printf("[module-info] (Case 2) Swapped pages is Zero! Total pages is %d\n", tot_cnt);
+		printf("> Swappiness: 0\n");
 	} else {
-		printf("[module] total_count is Zero!\n");
+		printf("[module-info] (Case 3) total_count is Zero!\n");
 	}
-
+	printf("----------------------------------------\n");
 	return 0;
 }
 
