@@ -75,8 +75,6 @@ int IS_SWP(u8 kpflags)
 #define BASE_PAGE_SIZE (1 << 12)
 #define HUGE_PAGE_SIZE (1 << 21)
 
-// Issue 1. How to get pid of jvm summary process?
-// >>> First, we will use pidof or jps for test.
 int cal_swpness(int pid, char *raw_beg, size_t raw_size)
 {
 	char pmap_path[25];	/* enough for 10-digit pid */
@@ -91,12 +89,9 @@ int cal_swpness(int pid, char *raw_beg, size_t raw_size)
 	kpflgf = open(kpflg_path, O_RDONLY);
 
 	u8 vaddr;
-	// printf("[module] raw_beg= %llu\n", raw_beg);
-	// printf("[module] raw_size= %d\n", raw_size);
 	u8 beg = (u8) raw_beg;
 	u8 size = (u8) raw_size;
 	printf("[module] beg= %llu\n", beg);
-	// printf("[module] size= %llu\n", size);
 	
 	u8 start_va = beg;
 
@@ -116,15 +111,11 @@ int cal_swpness(int pid, char *raw_beg, size_t raw_size)
 
 		lseek(pmapf, offset, SEEK_SET);
 		if (read(pmapf, &ent, 8) == 8) {
-			// printf("ok1\n");
 			pfn = PAGEMAP_PFN(ent);
-			// printf("ok2\n");
 			if (pfn == 0) {
 				printf("pfn is 0!\n");
 				continue;
 			}
-			//is_swapped = PAGEMAP_ISSWAPPED(ent);
-			//is_present = PAGEMAP_ISPRESENT(ent);
 			is_swapped = GET_BIT(ent, 62);
 			is_present = GET_BIT(ent, 63);
 			swap_type = PAGEMAP_SWAPTYPE(ent);
@@ -134,7 +125,6 @@ int cal_swpness(int pid, char *raw_beg, size_t raw_size)
 			printf("Fail to read pagemaps file!\n");
 			return -1;
 		}
-		// printf("ok3\n");	
 		lseek(kpflgf, pfn * 8, SEEK_SET);
 		if (read(kpflgf, &kpflags, 8) == 8) {
 			printf("Result: 0x%llx\n",(unsigned long long )kpflags);
@@ -152,7 +142,6 @@ int cal_swpness(int pid, char *raw_beg, size_t raw_size)
 				swp_cnt++;
 			// Increase total counter
 			tot_cnt++;
-			// printf("ok4\n");
 		} else {
 			err(2, "%s: read kpageflag", __func__);
 		}
@@ -199,7 +188,6 @@ int cal_swpness_1(int pid, char *raw_beg, char *raw_end)
 	// size(word) to byte 
 	u8 end_va = end; 
 
-	// there are 32 pages in one region.
 	for (vaddr = start_va; vaddr < end_va; vaddr += BASE_PAGE_SIZE) {
 		uint64_t ent = 0;
 		u8 pfn = 0;
@@ -219,7 +207,6 @@ int cal_swpness_1(int pid, char *raw_beg, char *raw_end)
 			is_swapped = GET_BIT(ent, 62);
 			is_present = GET_BIT(ent, 63);
 			swap_type = PAGEMAP_SWAPTYPE(ent);
-			// printf("is_swapped %llu, is_present %llu\n",is_swapped, is_present);
 		} else {
 			// TODO: error handling
 			printf("[module-error] Fail to read pagemaps file!\n");
@@ -228,7 +215,6 @@ int cal_swpness_1(int pid, char *raw_beg, char *raw_end)
 		
 		lseek(kpflgf, pfn * 8, SEEK_SET);
 		if (read(kpflgf, &kpflags, 8) == 8) {
-			// printf("Result: 0x%llx\n",(unsigned long long )kpflags);
 			if (IN_LRU(kpflags) == 0) {
 				out_of_lru++;
 				continue;
@@ -236,13 +222,9 @@ int cal_swpness_1(int pid, char *raw_beg, char *raw_end)
 			if (IS_HUGE(kpflags) == 1) {
 				vaddr += HUGE_PAGE_SIZE -
 					BASE_PAGE_SIZE;
-				// printf("Huge!\n");
 			}
-			// Increase swp obj counter
-			// if (IS_SWP(kpflags) == 1)
 			if (is_swapped == 1)
 				swp_cnt++;
-			// Increase total counter
 			tot_cnt++;
 		} else {
 			err(2, "%s: read kpageflag", __func__);
@@ -267,4 +249,3 @@ int cal_swpness_1(int pid, char *raw_beg, char *raw_end)
 	printf("----------------------------------------\n");
 	return 0;
 }
-

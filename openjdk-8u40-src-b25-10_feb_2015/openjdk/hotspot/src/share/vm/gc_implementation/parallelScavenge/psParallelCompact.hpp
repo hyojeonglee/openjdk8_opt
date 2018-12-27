@@ -34,17 +34,6 @@
 #include "memory/sharedHeap.hpp"
 #include "oops/oop.hpp"
 
-/* for swpness */
-/*
-#include <unistd.h>
-#include <iostream>
-#include <stdio.h>
-#include <string>
-#include <errno.h>
-#include <stdlib.h>
-#include <pthread.h>
-*/
-
 class ParallelScavengeHeap;
 class PSAdaptiveSizePolicy;
 class PSYoungGen;
@@ -479,24 +468,6 @@ public:
   HeapWord* calc_new_pointer(oop p) {
     return calc_new_pointer((HeapWord*) p);
   }
-
-  // for swpness
-  /*
-  int set_pid() {
-	char buffer[256];
-	std::string result = "";
-	FILE* pipe = popen("pidof java", "r");
-	if (!pipe) {
-		printf("[hjlee-error] %s\n", strerror(errno));
-	}
-	while (fgets(buffer, sizeof buffer, pipe) != NULL) {
-		result += buffer;
-	}
-	pclose(pipe);
-	_pid = atoi(result.c_str());
-	return _pid;
-  }
-  */
 
 #ifdef  ASSERT
   void verify_clear(const PSVirtualSpace* vspace);

@@ -764,10 +764,6 @@ bool ParallelCompactData::summarize(SplitInfo& split_info,
 	int pid = (int) raw_pid;
 	//int tid = syscall(SYS_gettid);
 	size_t RegionSize = ParallelCompactData::RegionSize;
-#if 0
-	char *temp_beg = (char *) source_beg;
-	cal_swpness(pid, temp_beg, RegionSize);
-#endif
 
 	HeapWord *dest_addr = target_beg;
 	while (cur_region < end_region) {
@@ -864,22 +860,7 @@ bool ParallelCompactData::summarize(SplitInfo& split_info,
 	size_t cur_region = addr_to_region_idx(source_beg);
 	const size_t end_region = addr_to_region_idx(region_align_up(source_end));
 
-	// pid_t raw_pid = getpid();
-	// int pid = (int) raw_pid;
-	// int tid = syscall(SYS_gettid);
 	size_t RegionSize = ParallelCompactData::RegionSize;
-#if 0
-	char *temp_beg = (char *) source_beg;
-	cal_swpness(pid, temp_beg, RegionSize);
-#endif
-
-	// string pid_str = GetStdoutFromCommand("pidof java");
-	// TODO: it needs to move previous step,
-	// before fill over whole memory.
-	// string pid_str = "";
-	// printf("[DEBUG] string pid: %s\n", pid_str.c_str());
-	// int pid = atoi(pid_str.c_str());
-	// printf("[DEBUG] pidof java: %d\n", pid);
 
 	int pid = ParallelCompactData::pid();
 
@@ -888,14 +869,12 @@ bool ParallelCompactData::summarize(SplitInfo& split_info,
 		// The destination must be set even if the region has no data.
 		_region_data[cur_region].set_destination(dest_addr);
 
-		// TODO
+		// TODO: changing point
 		HeapWord *cur_beg = region_to_addr(cur_region);
 		HeapWord *cur_end = cur_beg + RegionSize;
 		char *temp_beg = (char *) cur_beg;
 		char *temp_end = (char *) cur_end;
-		// TODO: tid to app's pid
 		cal_swpness_1(pid, temp_beg, temp_end);
-		//cal_swpness_1(tid, temp_beg, temp_end);
 		size_t words = _region_data[cur_region].data_size();
 		if (words > 0) {
 			// If cur_region does not fit entirely into the target space, find a point

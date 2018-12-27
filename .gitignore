@@ -1,0 +1,13 @@
+*.o
+*.debuginfo
+*.jar
+*.gch
+*tags
+*.d
+*.log
+*.gmk
+*.zip
+*.class
+*.diz
+*.java
+*.old
