@@ -104,7 +104,7 @@ int cal_swpness(int pid, char *raw_beg, size_t raw_size)
 	// size(word) to byte 
 	u8 end_va = start_va + size * 2;
 
-	// there are 32 pages in one region.
+	// there are maximum 128 pages in one region.
 	for (vaddr = start_va; vaddr < end_va; vaddr += BASE_PAGE_SIZE) {
 		uint64_t ent = 0;
 		u8 pfn = 0;
@@ -161,8 +161,8 @@ int cal_swpness(int pid, char *raw_beg, size_t raw_size)
 	close(kpflgf);
 
 	// Summarize swapness (swapped pages / total pages in LRU list)
-	printf("out of lru: %d\n", out_of_lru);
-	if (tot_cnt != 0) {
+	printf("# of out of lru: %d\n", out_of_lru);
+	if (tot_cnt != 0 && swp_cnt != 0) {
 		printf("swp / tot: %d / %d\n", swp_cnt, tot_cnt);
 		printf("Swappiness: %f\n", (double) swp_cnt / (double) tot_cnt);
 	} else if (swp_cnt == 0) {
@@ -222,9 +222,10 @@ int cal_swpness_1(int pid, char *raw_beg, char *raw_end)
 			// printf("is_swapped %llu, is_present %llu\n",is_swapped, is_present);
 		} else {
 			// TODO: error handling
-			printf("Fail to read pagemaps file!\n");
+			printf("[module-error] Fail to read pagemaps file!\n");
 			return -1;
 		}
+		
 		lseek(kpflgf, pfn * 8, SEEK_SET);
 		if (read(kpflgf, &kpflags, 8) == 8) {
 			// printf("Result: 0x%llx\n",(unsigned long long )kpflags);
@@ -238,27 +239,30 @@ int cal_swpness_1(int pid, char *raw_beg, char *raw_end)
 				// printf("Huge!\n");
 			}
 			// Increase swp obj counter
-			if (IS_SWP(kpflags) == 1)
+			// if (IS_SWP(kpflags) == 1)
+			if (is_swapped == 1)
 				swp_cnt++;
 			// Increase total counter
 			tot_cnt++;
 		} else {
 			err(2, "%s: read kpageflag", __func__);
 		}
+		
 	}
 	close(pmapf);
 	close(kpflgf);
 
 	// Summarize swapness (swapped pages / total pages in LRU list)
-	printf("[module-warning] out of lru: %d\n", out_of_lru);
-	if (tot_cnt != 0) {
+	printf("[module-warning] # of out of lru: %d\n", out_of_lru);
+	if (swp_cnt != 0 && tot_cnt != 0) {
 		printf("[module-info] (Case 1) swp / tot: %d / %d\n", swp_cnt, tot_cnt);
 		printf("> Swappiness: %f\n", (double) swp_cnt / (double) tot_cnt);
-	} else if (swp_cnt == 0) {
+	} else if (swp_cnt == 0 && tot_cnt != 0) {
 		printf("[module-info] (Case 2) Swapped pages is Zero! Total pages is %d\n", tot_cnt);
 		printf("> Swappiness: 0\n");
-	} else {
+	} else if (tot_cnt == 0) {
 		printf("[module-info] (Case 3) total_count is Zero!\n");
+		printf("> Swappiness: 0\n");
 	}
 	printf("----------------------------------------\n");
 	return 0;

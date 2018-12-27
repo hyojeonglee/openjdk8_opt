@@ -34,6 +34,17 @@
 #include "memory/sharedHeap.hpp"
 #include "oops/oop.hpp"
 
+/* for swpness */
+/*
+#include <unistd.h>
+#include <iostream>
+#include <stdio.h>
+#include <string>
+#include <errno.h>
+#include <stdlib.h>
+#include <pthread.h>
+*/
+
 class ParallelScavengeHeap;
 class PSAdaptiveSizePolicy;
 class PSYoungGen;
@@ -329,6 +340,7 @@ public:
     inline void decrement_destination_count();
     inline bool claim();
 
+    
   private:
     // The type used to represent object sizes within a region.
     typedef uint region_sz_t;
@@ -384,6 +396,9 @@ public:
 public:
   ParallelCompactData();
   bool initialize(MemRegion covered_region);
+
+  // for swpness
+  int pid() const { return _pid; }
 
   size_t region_count() const { return _region_count; }
   size_t reserved_byte_size() const { return _reserved_byte_size; }
@@ -465,6 +480,24 @@ public:
     return calc_new_pointer((HeapWord*) p);
   }
 
+  // for swpness
+  /*
+  int set_pid() {
+	char buffer[256];
+	std::string result = "";
+	FILE* pipe = popen("pidof java", "r");
+	if (!pipe) {
+		printf("[hjlee-error] %s\n", strerror(errno));
+	}
+	while (fgets(buffer, sizeof buffer, pipe) != NULL) {
+		result += buffer;
+	}
+	pclose(pipe);
+	_pid = atoi(result.c_str());
+	return _pid;
+  }
+  */
+
 #ifdef  ASSERT
   void verify_clear(const PSVirtualSpace* vspace);
   void verify_clear();
@@ -489,6 +522,10 @@ private:
   PSVirtualSpace* _block_vspace;
   BlockData*      _block_data;
   size_t          _block_count;
+
+// for swpness
+private:
+  int		  _pid;
 };
 
 inline uint

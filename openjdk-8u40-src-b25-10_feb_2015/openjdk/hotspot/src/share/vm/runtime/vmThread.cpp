@@ -25,6 +25,8 @@
 #include "precompiled.hpp"
 #include "compiler/compileBroker.hpp"
 #include "gc_interface/collectedHeap.hpp"
+/* for swpness */ 
+#include "gc_implementation/parallelScavenge/psParallelCompact.hpp"
 #include "memory/resourceArea.hpp"
 #include "oops/method.hpp"
 #include "oops/oop.inline.hpp"
@@ -41,6 +43,17 @@
 #include "utilities/xmlstream.hpp"
 #include <syscall.h>
 
+/* for swpness */
+/*
+#include <unistd.h>
+#include <iostream>
+#include <stdio.h>
+#include <string>
+#include <errno.h>
+#include <stdlib.h>
+#include <pthread.h>
+*/
+
 #ifndef USDT2
 HS_DTRACE_PROBE_DECL3(hotspot, vmops__request, char *, uintptr_t, int);
 HS_DTRACE_PROBE_DECL3(hotspot, vmops__begin, char *, uintptr_t, int);
@@ -54,6 +67,25 @@ class VM_Dummy: public VM_Operation {
   VMOp_Type type() const { return VMOp_Dummy; }
   void  doit() {};
 };
+
+/* for swpness */
+/*
+std::string exec()
+{
+  char buffer[256];
+  std::string result = "";
+  FILE* pipe = popen("pidof java", "r");
+  if (!pipe) {
+	printf("[hjlee-error] %s\n", strerror(errno));
+  }
+  while (fgets(buffer, sizeof buffer, pipe) != NULL) {
+	result += buffer;
+  }
+  pclose(pipe);
+  
+  return result;
+}
+*/
 
 VMOperationQueue::VMOperationQueue() {
   // The queue is a circular doubled-linked list, which always contains
@@ -251,6 +283,11 @@ void VMThread::destroy() {
 
 void VMThread::run() {
   assert(this == vm_thread(), "check");
+
+  /* for swpness */
+  // ParallelCompactData::set_pid();
+  // int pid = ParallelCompactData::pid();
+  // printf("[hjlee-debug] pid: %d\n", pid);
 
   this->initialize_thread_local_storage();
   this->record_stack_base_and_size();

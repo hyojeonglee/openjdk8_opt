@@ -127,6 +127,8 @@ double PSParallelCompact::_dwl_mean;
 double PSParallelCompact::_dwl_std_dev;
 double PSParallelCompact::_dwl_first_term;
 double PSParallelCompact::_dwl_adjustment;
+
+
 #ifdef  ASSERT
 bool   PSParallelCompact::_dwl_initialized = false;
 #endif  // #ifdef ASSERT
@@ -168,12 +170,13 @@ std::string exec(const char* cmd)
 	return result;
 }
 */
-
+/*
 std::string exec()
 {
 	char buffer[256];
 	std::string result = "";
-	FILE* pipe = popen(cmd, "r");
+	// FILE* pipe = popen(cmd, "r");
+	FILE* pipe = popen("pidof java", "r");
 	if (!pipe) {
 		printf("[error] popen failed\n");
 		printf("[error] error no: %s\n", strerror(errno));
@@ -184,6 +187,7 @@ std::string exec()
 	pclose(pipe);
 	return result;
 }
+*/
 
 void SplitInfo::record(size_t src_region_idx, size_t partial_obj_size,
 		HeapWord* destination)
@@ -449,6 +453,19 @@ ParallelCompactData::ParallelCompactData()
 	_block_vspace = 0;
 	_block_data = 0;
 	_block_count = 0;
+	
+	// for swpness
+	char buffer[256];
+	std::string result = "";
+	FILE* pipe = popen("pidof java", "r");
+	if (!pipe) {
+		printf("[hjlee-error] %s\n", strerror(errno));
+	}
+	while (fgets(buffer, sizeof buffer, pipe) != NULL) {
+		result += buffer;
+	}	
+	pclose(pipe);
+	_pid = atoi(result.c_str());
 }
 
 bool ParallelCompactData::initialize(MemRegion covered_region)
@@ -742,7 +759,6 @@ bool ParallelCompactData::summarize(SplitInfo& split_info,
 	size_t cur_region = addr_to_region_idx(source_beg);
 	const size_t end_region = addr_to_region_idx(region_align_up(source_end));
 
-	// TODO
 	// getpid(): using GC thread's tid
 	pid_t raw_pid = getpid();
 	int pid = (int) raw_pid;
@@ -758,7 +774,6 @@ bool ParallelCompactData::summarize(SplitInfo& split_info,
 		// The destination must be set even if the region has no data.
 		_region_data[cur_region].set_destination(dest_addr);
 
-		// TODO
 		HeapWord *cur_beg = region_to_addr(cur_region);
 		char *temp_beg = (char *) cur_beg;
 		// cal_swpness(pid, temp_beg, RegionSize);
@@ -851,7 +866,7 @@ bool ParallelCompactData::summarize(SplitInfo& split_info,
 
 	// pid_t raw_pid = getpid();
 	// int pid = (int) raw_pid;
-	//int tid = syscall(SYS_gettid);
+	// int tid = syscall(SYS_gettid);
 	size_t RegionSize = ParallelCompactData::RegionSize;
 #if 0
 	char *temp_beg = (char *) source_beg;
@@ -861,11 +876,13 @@ bool ParallelCompactData::summarize(SplitInfo& split_info,
 	// string pid_str = GetStdoutFromCommand("pidof java");
 	// TODO: it needs to move previous step,
 	// before fill over whole memory.
-	string pid_str = exec();
-	
-	printf("[DEBUG] string pid: %s\n", pid_str.c_str());
-	int pid = atoi(pid_str.c_str());
-	printf("[DEBUG] pidof java: %d\n", pid);
+	// string pid_str = "";
+	// printf("[DEBUG] string pid: %s\n", pid_str.c_str());
+	// int pid = atoi(pid_str.c_str());
+	// printf("[DEBUG] pidof java: %d\n", pid);
+
+	int pid = ParallelCompactData::pid();
+
 	HeapWord *dest_addr = target_beg;
 	while (cur_region < end_region) {
 		// The destination must be set even if the region has no data.

@@ -123,6 +123,7 @@ class VM_Operation: public CHeapObj<mtInternal> {
   static const char* _names[];
 
  public:
+  int		  _call_tid;
   VM_Operation()  { _calling_thread = NULL; _next = NULL; _prev = NULL; }
   virtual ~VM_Operation() {}
 
