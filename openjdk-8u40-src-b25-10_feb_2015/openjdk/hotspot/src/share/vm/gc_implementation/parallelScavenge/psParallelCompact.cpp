@@ -870,11 +870,17 @@ bool ParallelCompactData::summarize(SplitInfo& split_info,
 		_region_data[cur_region].set_destination(dest_addr);
 
 		// TODO: changing point
+		// Return swpness to this thread.
 		HeapWord *cur_beg = region_to_addr(cur_region);
 		HeapWord *cur_end = cur_beg + RegionSize;
 		char *temp_beg = (char *) cur_beg;
 		char *temp_end = (char *) cur_end;
 		cal_swpness_1(pid, temp_beg, temp_end);
+	
+		// Attempt (1) Just skip when "swpness == 1".
+		// if (swpness == 1)
+		//	continue;
+
 		size_t words = _region_data[cur_region].data_size();
 		if (words > 0) {
 			// If cur_region does not fit entirely into the target space, find a point
