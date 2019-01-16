@@ -72,9 +72,12 @@
 #include <errno.h>
 
 using namespace std;
-extern "C" int cal_swpness(int pid, char *raw_beg, size_t raw_size);
-extern "C" int cal_swpness_1(int pid, char *raw_beg, char *raw_end);
-extern "C" int cal_swpness_charlie(int pid, char *raw_beg, size_t raw_size);
+// extern "C" int cal_swpness(int pid, char *raw_beg, size_t raw_size);
+
+// Currently used version
+extern "C" double cal_swpness_1(int pid, char *raw_beg, char *raw_end);
+
+// extern "C" int cal_swpness_charlie(int pid, char *raw_beg, size_t raw_size);
 
 PRAGMA_FORMAT_MUTE_WARNINGS_FOR_GCC
 
@@ -741,7 +744,7 @@ ParallelCompactData::summarize_split_space(size_t src_region,
 	return source_next;
 }
 
-// Existing version
+// old version
 bool ParallelCompactData::summarize(SplitInfo& split_info,
 		HeapWord* source_beg, HeapWord* source_end,
 		HeapWord** source_next,
@@ -841,8 +844,7 @@ bool ParallelCompactData::summarize(SplitInfo& split_info,
 	return true;
 }
 
-// Currently used version
-// added by charlie 0909
+// TODO: Currently used version. 
 bool ParallelCompactData::summarize(SplitInfo& split_info,
 		HeapWord* source_beg, HeapWord* source_end,
 		HeapWord** source_next,
@@ -865,23 +867,45 @@ bool ParallelCompactData::summarize(SplitInfo& split_info,
 	int pid = ParallelCompactData::pid();
 
 	HeapWord *dest_addr = target_beg;
+	double swpness;
 	while (cur_region < end_region) {
 		// The destination must be set even if the region has no data.
-		_region_data[cur_region].set_destination(dest_addr);
-
+		// _region_data[cur_region].set_destination(dest_addr);
+		// words is live data size of cur_region
+		size_t words = _region_data[cur_region].data_size();
+	
+// for swpness
 		// TODO: changing point
 		// Return swpness to this thread.
 		HeapWord *cur_beg = region_to_addr(cur_region);
 		HeapWord *cur_end = cur_beg + RegionSize;
 		char *temp_beg = (char *) cur_beg;
 		char *temp_end = (char *) cur_end;
-		cal_swpness_1(pid, temp_beg, temp_end);
+		swpness = cal_swpness_1(pid, temp_beg, temp_end);
 	
-		// Attempt (1) Just skip when "swpness == 1".
-		// if (swpness == 1)
-		//	continue;
+		
+		// Attempt (1) Just skip when "swpness > 0".
+		if (swpness > 0) {
+			// printf("[DEBUG] swapness > 0\n");
+			// Reason why using cur_region in set_destination:
+			// in void MoveAndUpdateClosure::copy_partial_obj(),
+			// there are some codes like below:
+			// if (source() != destination()) {
+			//	Do copy...
+			// }
+			_region_data[cur_region].set_destination(cur_region);
+			_region_data[cur_region].set_destination_count(0);
+			_region_data[cur_region].set_data_location(region_to_addr(cur_region));
+			// dest_addr += words;
+			++cur_region;
+			continue;
+		}
+		
+// end for swpness
 
-		size_t words = _region_data[cur_region].data_size();
+		// The destination must be set even if the region has no data.
+		_region_data[cur_region].set_destination(dest_addr);
+		
 		if (words > 0) {
 			// If cur_region does not fit entirely into the target space, find a point
 			// at which the source space can be 'split' so that part is copied to the
@@ -2019,7 +2043,6 @@ PSParallelCompact::summarize_space(SpaceId id, bool maximum_compaction)
 
 			// Compute the destination of each Region, and thus each object.
 			_summary_data.summarize_dense_prefix(space->bottom(), dense_prefix_end);
-			// printf("[hjlee] psParallelCompact.cpp:1949\n");
 			_summary_data.summarize(_space_info[id].split_info(),
 					dense_prefix_end, space->top(), NULL,
 					dense_prefix_end, space->end(),
