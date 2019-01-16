@@ -71,6 +71,9 @@
 #include <string>
 #include <errno.h>
 
+// for test execution time module
+#include <time.h>
+
 using namespace std;
 // extern "C" int cal_swpness(int pid, char *raw_beg, size_t raw_size);
 
@@ -135,62 +138,28 @@ double PSParallelCompact::_dwl_adjustment;
 #ifdef  ASSERT
 bool   PSParallelCompact::_dwl_initialized = false;
 #endif  // #ifdef ASSERT
-/*
-string GetStdoutFromCommand(string cmd)
-{
 
-	string data;
-	FILE* stream;
-	const int max_buffer = 256;
-	char buffer[max_buffer];
-	cmd.append(" 2>&1");
 
-	stream = popen(cmd.c_str(), "r");
-	if (stream) {
-		while (!feof(stream)) {
-			if (fgets(buffer, max_buffer, stream) != NULL)
-				data.append(buffer);
-		}
-		pclose(stream);
-	
-	}
-	printf("[DEBUG] data string: %s\n", data.c_str());
-	return data;
-}
-*/
-/*
-std::string exec(const char* cmd) 
-{
-	std::array<char, 128> buffer;
-	std::string result;
-	std::unique_ptr<FILE, decltype(&pclose)> pipe(popen(cmd, "r"), pclose);
-	if (!pipe) {
-		throw std::runtime_error("popen() failed!");
-	}
-	while (fgets(buffer.data(), buffer.size(), pipe.get()) != nullptr) {
-		result += buffer.data();
-	}
-	return result;
-}
-*/
-/*
-std::string exec()
-{
-	char buffer[256];
-	std::string result = "";
-	// FILE* pipe = popen(cmd, "r");
-	FILE* pipe = popen("pidof java", "r");
-	if (!pipe) {
-		printf("[error] popen failed\n");
-		printf("[error] error no: %s\n", strerror(errno));
-	}
-	while (fgets(buffer, sizeof buffer, pipe) != NULL) {
-		result += buffer;
-	}
-	pclose(pipe);
-	return result;
-}
-*/
+// for function level profiling
+#define BILLION     (1000000000ULL)
+#define calclock(timevalue, total_time, total_count) do { \
+	unsigned long long timedelay, temp, temp_n; \
+	struct timespec *myclock = (struct timespec*)timevalue; \
+	if(myclock[1].tv_nsec >= myclock[0].tv_nsec){ \
+		temp = myclock[1].tv_sec - myclock[0].tv_sec; \
+		temp_n = myclock[1].tv_nsec - myclock[0].tv_nsec; \
+		timedelay = BILLION * temp + temp_n; \
+	} else { \
+		temp = myclock[1].tv_sec - myclock[0].tv_sec - 1; \
+		temp_n = BILLION + myclock[1].tv_nsec - myclock[0].tv_nsec; \
+		timedelay = BILLION * temp + temp_n; \
+	} \
+	__sync_fetch_and_add(total_time, timedelay); \
+	__sync_fetch_and_add(total_count, 1); \
+} while(0)
+unsigned long long total_time1, total_count1;
+unsigned long long total_time2, total_count2;
+// endfor
 
 void SplitInfo::record(size_t src_region_idx, size_t partial_obj_size,
 		HeapWord* destination)
@@ -456,7 +425,7 @@ ParallelCompactData::ParallelCompactData()
 	_block_vspace = 0;
 	_block_data = 0;
 	_block_count = 0;
-	
+
 	// for swpness
 	char buffer[256];
 	std::string result = "";
@@ -873,7 +842,10 @@ bool ParallelCompactData::summarize(SplitInfo& split_info,
 		// _region_data[cur_region].set_destination(dest_addr);
 		// words is live data size of cur_region
 		size_t words = _region_data[cur_region].data_size();
-	
+		
+		struct timespec local_time1[2];
+
+		clock_gettime(CLOCK_MONOTONIC, &local_time1[0]);
 // for swpness
 		// TODO: changing point
 		// Return swpness to this thread.
@@ -882,19 +854,17 @@ bool ParallelCompactData::summarize(SplitInfo& split_info,
 		char *temp_beg = (char *) cur_beg;
 		char *temp_end = (char *) cur_end;
 		swpness = cal_swpness_1(pid, temp_beg, temp_end);
-	
-		
+
 		// Attempt (1) Just skip when "swpness > 0".
 		if (swpness > 0) {
-			/* 
-			 * Reason why using cur_region in set_destination:
-			 * in void MoveAndUpdateClosure::copy_partial_obj(),
-			 * there are some codes like below:
-			 * if (source() != destination()) {
-			 *	Do copy...
-			 * }
-			 *
-			 */
+
+			// Reason why using cur_region in set_destination:
+			// in void MoveAndUpdateClosure::copy_partial_obj(),
+			// there are some codes like below:
+			// if (source() != destination()) {
+			//	Do copy...
+			// }
+
 			_region_data[cur_region].set_destination(region_to_addr(cur_region));
 			_region_data[cur_region].set_destination_count(0);
 			_region_data[cur_region].set_data_location(region_to_addr(cur_region));
@@ -902,12 +872,14 @@ bool ParallelCompactData::summarize(SplitInfo& split_info,
 			++cur_region;
 			continue;
 		}
-		
 // end for swpness
+		clock_gettime(CLOCK_MONOTONIC, &local_time1[1]);
+		calclock(local_time1, &total_time1, &total_count1);
+		// std::cout << "[" << __func__ << "] " << "time: " << total_time1 << ", count: " << total_count1 << std::endl;
 
 		// The destination must be set even if the region has no data.
 		_region_data[cur_region].set_destination(dest_addr);
-		
+
 		if (words > 0) {
 			// If cur_region does not fit entirely into the target space, find a point
 			// at which the source space can be 'split' so that part is copied to the
@@ -1905,8 +1877,7 @@ void PSParallelCompact::summarize_spaces_quick()
 		assert(result, "space must fit into itself");
 		_space_info[i].set_dense_prefix(space->bottom());
 	}
-
-#ifndef PRODUCT
+	#ifndef PRODUCT
 	if (ParallelOldGCSplitALot) {
 		provoke_split_fill_survivor(to_space_id);
 	}
@@ -2209,6 +2180,8 @@ void PSParallelCompact::summary_phase(ParCompactionManager* cm,
 			NOT_PRODUCT(print_generic_summary_data(_summary_data, _space_info));
 		}
 	}
+	// for time test
+	printf("[summarize] total_time1: %llu\n", total_time1);
 }
 
 // This method should contain all heap-specific policy for invoking a full

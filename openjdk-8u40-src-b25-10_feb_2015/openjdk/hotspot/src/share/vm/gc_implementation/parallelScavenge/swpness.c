@@ -181,7 +181,7 @@ double cal_swpness_1(int pid, char *raw_beg, char *raw_end)
 	u8 vaddr;
 	u8 beg = (u8) raw_beg;
 	u8 end = (u8) raw_end;
-	printf("[module] beg= %llu\n", beg);
+	// printf("[module] beg= %llu\n", beg);
 	
 	u8 start_va = beg;
 
@@ -200,7 +200,7 @@ double cal_swpness_1(int pid, char *raw_beg, char *raw_end)
 		if (read(pmapf, &ent, 8) == 8) {
 			pfn = PAGEMAP_PFN(ent);
 			if (pfn == 0) {
-				printf("[module-warning] pfn is 0!\n");
+				// printf("[module-warning] pfn is 0!\n");
 				continue;
 			}
 			is_swapped = GET_BIT(ent, 62);
@@ -232,21 +232,21 @@ double cal_swpness_1(int pid, char *raw_beg, char *raw_end)
 	close(kpflgf);
 
 	// Summarize swapness (swapped pages / total pages in LRU list)
-	printf("[module-warning] # of out of lru: %d\n", out_of_lru);
+	// printf("[module-warning] # of out of lru: %d\n", out_of_lru);
 	if (swp_cnt != 0 && tot_cnt != 0) {
-		printf("[module-info] (Case 1) swp / tot: %d / %d\n", swp_cnt, tot_cnt);
-		printf("> Swappiness: %f\n", (double) swp_cnt / (double) tot_cnt);
+		// printf("[module-info] (Case 1) swp / tot: %d / %d\n", swp_cnt, tot_cnt);
+		// printf("> Swappiness: %f\n", (double) swp_cnt / (double) tot_cnt);
 		swpness = (double) swp_cnt / (double) tot_cnt;
 	} else if (swp_cnt == 0 && tot_cnt != 0) {
-		printf("[module-info] (Case 2) Swapped pages is Zero! Total pages is %d\n", tot_cnt);
-		printf("> Swappiness: 0\n");
+		// printf("[module-info] (Case 2) Swapped pages is Zero! Total pages is %d\n", tot_cnt);
+		// printf("> Swappiness: 0\n");
 		swpness = 0;
 	} else if (tot_cnt == 0) {
-		printf("[module-info] (Case 3) total_count is Zero!\n");
-		printf("> Swappiness: 0\n");
+		// printf("[module-info] (Case 3) total_count is Zero!\n");
+		// printf("> Swappiness: 0\n");
 		swpness = 0;
 	}
-	printf("----------------------------------------\n");
+	// printf("----------------------------------------\n");
 	
 	return swpness;
 }
