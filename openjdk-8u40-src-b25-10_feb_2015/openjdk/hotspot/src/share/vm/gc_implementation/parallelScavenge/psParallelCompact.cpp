@@ -886,14 +886,16 @@ bool ParallelCompactData::summarize(SplitInfo& split_info,
 		
 		// Attempt (1) Just skip when "swpness > 0".
 		if (swpness > 0) {
-			// printf("[DEBUG] swapness > 0\n");
-			// Reason why using cur_region in set_destination:
-			// in void MoveAndUpdateClosure::copy_partial_obj(),
-			// there are some codes like below:
-			// if (source() != destination()) {
-			//	Do copy...
-			// }
-			_region_data[cur_region].set_destination(cur_region);
+			/* 
+			 * Reason why using cur_region in set_destination:
+			 * in void MoveAndUpdateClosure::copy_partial_obj(),
+			 * there are some codes like below:
+			 * if (source() != destination()) {
+			 *	Do copy...
+			 * }
+			 *
+			 */
+			_region_data[cur_region].set_destination(region_to_addr(cur_region));
 			_region_data[cur_region].set_destination_count(0);
 			_region_data[cur_region].set_data_location(region_to_addr(cur_region));
 			// dest_addr += words;
