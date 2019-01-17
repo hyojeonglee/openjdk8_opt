@@ -305,6 +305,9 @@ public:
     // can be completed.
     bool available() const { return _dc_and_los < dc_one; }
     bool claimed() const   { return _dc_and_los >= dc_claimed; }
+    //charlie added
+    //bool claimed() const   { return 1; }
+    //charlie add end
     bool completed() const { return _dc_and_los >= dc_completed; }
 
     // These are not atomic.
@@ -549,7 +552,9 @@ inline void ParallelCompactData::RegionData::set_live_obj_size(size_t words)
 
 inline void ParallelCompactData::RegionData::decrement_destination_count()
 {
+//charlie added
   assert(_dc_and_los < dc_claimed, "already claimed");
+//charlie add end
   assert(_dc_and_los >= dc_one, "count would go negative");
   Atomic::add((int)dc_mask, (volatile int*)&_dc_and_los);
 }

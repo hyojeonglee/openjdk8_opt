@@ -854,7 +854,7 @@ bool ParallelCompactData::summarize(SplitInfo& split_info,
 		char *temp_beg = (char *) cur_beg;
 		char *temp_end = (char *) cur_end;
 		swpness = cal_swpness_1(pid, temp_beg, temp_end);
-
+#if 0
 		// Attempt (1) Just skip when "swpness > 0".
 		if (swpness > 0) {
 
@@ -872,6 +872,7 @@ bool ParallelCompactData::summarize(SplitInfo& split_info,
 			++cur_region;
 			continue;
 		}
+#endif
 // end for swpness
 		clock_gettime(CLOCK_MONOTONIC, &local_time1[1]);
 		calclock(local_time1, &total_time1, &total_count1);
@@ -901,7 +902,8 @@ bool ParallelCompactData::summarize(SplitInfo& split_info,
 			// This maintains the invariant that a zero count means the region is
 			// available and can be claimed and then filled.
 			uint destination_count = 0;
-			if (split_info.is_split(cur_region)) {
+//charlie added swpness <= 0
+			if (split_info.is_split(cur_region) && swpness <= 0) {
 				// The current region has been split:  the partial object will be copied
 				// to one destination space and the remaining data will be copied to
 				// another destination space.  Adjust the initial destination_count and,
@@ -923,20 +925,27 @@ bool ParallelCompactData::summarize(SplitInfo& split_info,
 			// cur_region == dest_region_2, then cur_region will be compacted
 			// completely into itself.
 			destination_count += cur_region == dest_region_2 ? 0 : 1;
-			if (dest_region_1 != dest_region_2) {
+//charlie added swpness <= 0
+			if (dest_region_1 != dest_region_2 && swpness <= 0) {
 				// Destination regions differ; adjust destination_count.
 				destination_count += 1;
 				// Data from cur_region will be copied to the start of dest_region_2.
 				_region_data[dest_region_2].set_source_region(cur_region);
-			} else if (region_offset(dest_addr) == 0) {
+			} else if (region_offset(dest_addr) == 0 && swpness <= 0) {
 				// Data from cur_region will be copied to the start of the destination
 				// region.
 				_region_data[dest_region_1].set_source_region(cur_region);
 			}
-
-			_region_data[cur_region].set_destination_count(destination_count);
-			_region_data[cur_region].set_data_location(region_to_addr(cur_region));
-			dest_addr += words;
+			if(swpness > 0) {
+				_region_data[cur_region].set_destination_count(destination_count);
+				_region_data[cur_region].set_data_location(region_to_addr(cur_region));
+				dest_addr += words;
+			}else {
+			
+				_region_data[cur_region].set_destination_count(destination_count);
+				_region_data[cur_region].set_data_location(region_to_addr(cur_region));
+				dest_addr += words;
+			}
 		}
 
 		++cur_region;
