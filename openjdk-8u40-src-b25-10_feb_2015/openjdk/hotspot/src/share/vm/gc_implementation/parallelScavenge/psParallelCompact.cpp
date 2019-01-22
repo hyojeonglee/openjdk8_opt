@@ -845,8 +845,8 @@ bool ParallelCompactData::summarize(SplitInfo& split_info,
 		
 		struct timespec local_time1[2];
 
-		clock_gettime(CLOCK_MONOTONIC, &local_time1[0]);
 // for swpness
+		clock_gettime(CLOCK_MONOTONIC, &local_time1[0]);
 		// TODO: changing point
 		// Return swpness to this thread.
 		HeapWord *cur_beg = region_to_addr(cur_region);
@@ -866,8 +866,8 @@ bool ParallelCompactData::summarize(SplitInfo& split_info,
 			// }
 
 			_region_data[cur_region].set_destination(region_to_addr(cur_region));
-			_region_data[cur_region].set_destination_count(0);
-			_region_data[cur_region].set_data_location(region_to_addr(cur_region));
+			_region_data[cur_region].set_destination_count(3);
+			// _region_data[cur_region].set_data_location(region_to_addr(cur_region));
 			// dest_addr += words;
 			++cur_region;
 			continue;
@@ -3508,6 +3508,13 @@ void PSParallelCompact::decrement_destination_counts(ParCompactionManager* cm,
 
 	for (RegionData* cur = beg; cur < end; ++cur) {
 		assert(cur->data_size() > 0, "region must have live data");
+	
+		// TODO by hjlee
+		if (cur->destination_count() == 3) {
+		 	printf("[hjlee] line 3518\n");
+		 	continue;
+		}
+	
 		cur->decrement_destination_count();
 		if (cur < enqueue_end && cur->available() && cur->claim()) {
 			cm->push_region(sd.region(cur));
