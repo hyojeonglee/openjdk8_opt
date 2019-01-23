@@ -388,6 +388,8 @@ public:
 
   // for swpness
   int pid() const { return _pid; }
+  // for swpness check
+  void print_swp_info(HeapWord* source, HeapWord* destination);
 
   size_t region_count() const { return _region_count; }
   size_t reserved_byte_size() const { return _reserved_byte_size; }
