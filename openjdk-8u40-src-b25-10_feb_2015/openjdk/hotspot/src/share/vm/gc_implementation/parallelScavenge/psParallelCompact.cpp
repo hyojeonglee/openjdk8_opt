@@ -843,33 +843,34 @@ bool ParallelCompactData::summarize(SplitInfo& split_info,
 	int pid = ParallelCompactData::pid();
 
 	HeapWord *dest_addr = target_beg;
-	double swpness;
 	while (cur_region < end_region) {
 		// The destination must be set even if the region has no data.
 		// _region_data[cur_region].set_destination(dest_addr);
 		// words is live data size of cur_region
 		size_t words = _region_data[cur_region].data_size();
-		
-		struct timespec local_time1[2];
+		double swpness = -1;
 
-// for swpness
-		clock_gettime(CLOCK_MONOTONIC, &local_time1[0]);
-		
-		// TODO: changing point
-		// Return swpness to this thread.
-		HeapWord *cur_beg = region_to_addr(cur_region);
-		HeapWord *cur_end = cur_beg + RegionSize;
-		char *temp_beg = (char *) cur_beg;
-		char *temp_end = (char *) cur_end;
-		swpness = cal_swpness_1(pid, temp_beg, temp_end);
-		
-		clock_gettime(CLOCK_MONOTONIC, &local_time1[1]);
-		calclock(local_time1, &total_time1, &total_count1);
+		if (words > 0) {
+			struct timespec local_time1[2];
 
+			// for swpness
+			clock_gettime(CLOCK_MONOTONIC, &local_time1[0]);
+
+			// TODO: changing point
+			// Return swpness to this thread.
+			// 일단, words만큼씩 더해서 스왑을 체크 (regionSize 단위로
+			// 해야할까?)
+			HeapWord *dest_end = dest_addr + words;
+			char *temp_beg = (char *) dest_addr;
+			char *temp_end = (char *) dest_end;
+			swpness = cal_swpness_1(pid, temp_beg, temp_end);
+
+			clock_gettime(CLOCK_MONOTONIC, &local_time1[1]);
+			calclock(local_time1, &total_time1, &total_count1);
+		}
 
 		// Attempt (1) Just skip when "swpness > 0".
-		if (swpness > 0) {
-
+		if (swpness > 0 && words > 0) {
 			// hjlee:
 			// Reason why using cur_region in set_destination:
 			// in void MoveAndUpdateClosure::copy_partial_obj(),
@@ -878,16 +879,20 @@ bool ParallelCompactData::summarize(SplitInfo& split_info,
 			//	Do copy...
 			// }
 
-			_region_data[cur_region].set_destination(region_to_addr(cur_region));
-			_region_data[cur_region].set_destination_count(3);
-			_region_data[cur_region].set_source_region(cur_region);
-			// _region_data[cur_region].set_data_location(region_to_addr(cur_region));
-			// dest_addr += words;
+			size_t dest_reg = addr_to_region_idx(dest_addr);
+			_region_data[dest_reg].set_destination(dest_addr);
+			_region_data[dest_reg].set_destination_count(3);
+			_region_data[dest_reg].set_source_region(dest_reg);
+			_region_data[cur_region].set_data_location(region_to_addr(cur_region));
+			dest_addr += words;
 			++cur_region;
+
+			char *temp_addr = (char *) dest_addr;
+			printf("Dest reg %s is swpped, so set dest's source to itself.\n", temp_addr);
 			continue;
 		}
-// end for swpness
-		
+		// end for swpness
+
 		// The destination must be set even if the region has no data.
 		_region_data[cur_region].set_destination(dest_addr);
 
@@ -1888,7 +1893,7 @@ void PSParallelCompact::summarize_spaces_quick()
 		assert(result, "space must fit into itself");
 		_space_info[i].set_dense_prefix(space->bottom());
 	}
-	#ifndef PRODUCT
+#ifndef PRODUCT
 	if (ParallelOldGCSplitALot) {
 		provoke_split_fill_survivor(to_space_id);
 	}
@@ -2030,9 +2035,9 @@ PSParallelCompact::summarize_space(SpaceId id, bool maximum_compaction)
 			// use newest summarize version
 			// parameter tid is useless, so just pass 0.
 			_summary_data.summarize_dense_prefix(space->bottom(), dense_prefix_end);
-			
+
 			printf("[hjlee-debug] second summarization with dense prefix triggered.\n");
-			
+
 			_summary_data.summarize(_space_info[id].split_info(),
 					dense_prefix_end, space->top(), NULL,
 					dense_prefix_end, space->end(),
@@ -2102,10 +2107,10 @@ void PSParallelCompact::summary_phase(ParCompactionManager* cm,
 	// Quick summarization of each space into itself, to see how much is live.
 	// 1-hjlee. 각 space의 liveness를 빠르게 요약
 	// 현재, 이 부분에서 swpness를 계산한다
-	
+
 	// old version:
 	// summarize_spaces_quick();
-	
+
 	// Changed point: use other version of summarize_spaces_quick
 	// TODO: useless change
 	// added by charlie 0909
@@ -3537,7 +3542,11 @@ void PSParallelCompact::decrement_destination_counts(ParCompactionManager* cm,
 		// TODO by hjlee
 		// Swapped live region can't become available.
 		if (cur->destination_count() == 3) {
-		 	continue;
+			size_t cur_idx = sd.region(cur);
+			HeapWord* cur_addr = sd.region_to_addr(cur_idx);
+			char *temp_addr = (char *) cur_addr;
+			printf("[hjlee-debug] cur_addr %s is swapped object at function decrement_dest_count.\n", temp_addr);
+			continue;
 		}
 
 		cur->decrement_destination_count();
@@ -3844,7 +3853,9 @@ void PSParallelCompact::reset_millis_since_last_gc() {
 ParMarkBitMap::IterationStatus MoveAndUpdateClosure::copy_until_full()
 {
 	ParallelCompactData& sd = PSParallelCompact::summary_data();
+	printf("Copy until full\n");
 	if (source() == destination()) {
+		printf("source == destination at util full\n");
 		sd.print_swp_info(source(), destination());
 	}
 	if (source() != destination()) {
@@ -3868,9 +3879,11 @@ void MoveAndUpdateClosure::copy_partial_obj()
 
 	// This test is necessary; if omitted, the pointer updates to a partial object
 	// that crosses the dense prefix boundary could be overwritten.
-	
+
+	printf("Copy partial obj\n");
 	ParallelCompactData& sd = PSParallelCompact::summary_data();
 	if (source() == destination()) {
+		printf("source == destination at partial\n");
 		sd.print_swp_info(source(), destination());
 	}
 	if (source() != destination()) {
