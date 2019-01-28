@@ -174,6 +174,7 @@ double cal_swpness_1(int pid, char *raw_beg, char *raw_end)
 	int out_of_lru = 0;
 	double swpness;
 
+	// printf("[hjlee-debug] pid: %d\n", pid);
 	sprintf(pmap_path, "/proc/%d/pagemap", pid);
 	pmapf = open(pmap_path, O_RDONLY);
 	kpflgf = open(kpflg_path, O_RDONLY);
@@ -195,9 +196,12 @@ double cal_swpness_1(int pid, char *raw_beg, char *raw_end)
 		uint64_t kpflags = 0;
 		u8 is_swapped = 0;
 		u8 offset = vaddr >> (BASE_PAGE_SHIFT - 3);
-
+		
+		// printf("[hjlee-debug] offset: %llu\n", offset);
 		lseek(pmapf, offset, SEEK_SET);
-		if (read(pmapf, &ent, 8) == 8) {
+		
+		ssize_t rd = read(pmapf, &ent, 8);
+		if (rd == 8) {
 			pfn = PAGEMAP_PFN(ent);
 			if (pfn == 0) {
 				// printf("[module-warning] pfn is 0!\n");
@@ -206,7 +210,7 @@ double cal_swpness_1(int pid, char *raw_beg, char *raw_end)
 			is_swapped = GET_BIT(ent, 62);
 		} else {
 			// TODO: error handling
-			printf("[module-error] Fail to read pagemaps file!\n");
+			printf("[module-error] Fail to read pagemaps file! rd is %li\n", rd);
 			return -1;
 		}
 		

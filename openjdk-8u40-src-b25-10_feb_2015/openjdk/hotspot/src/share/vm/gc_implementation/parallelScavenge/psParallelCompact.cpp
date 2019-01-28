@@ -858,11 +858,16 @@ bool ParallelCompactData::summarize(SplitInfo& split_info,
 
 			// TODO: changing point
 			// Return swpness to this thread.
-			// 일단, words만큼씩 더해서 스왑을 체크 (regionSize 단위로
-			// 해야할까?)
-			HeapWord *dest_end = dest_addr + words;
+			// 1. 일단, words만큼씩 더해서 스왑을 체크 (RegionSize 단위로
+			// 해야할까?) > 안됨
+			// 2. RegionSize 단위로 해보기 > 안됨
+			HeapWord *dest_end = dest_addr + RegionSize;
 			char *temp_beg = (char *) dest_addr;
 			char *temp_end = (char *) dest_end;
+			// for test
+			unsigned long long u8_beg = (unsigned long long) temp_beg;
+			unsigned long long u8_end = (unsigned long long) temp_end;
+			printf("temp_beg: %llu   temp_end: %llu\n", u8_beg, u8_end);
 			swpness = cal_swpness_1(pid, temp_beg, temp_end);
 
 			clock_gettime(CLOCK_MONOTONIC, &local_time1[1]);
@@ -883,29 +888,39 @@ bool ParallelCompactData::summarize(SplitInfo& split_info,
 			_region_data[dest_reg].set_destination(dest_addr);
 			_region_data[dest_reg].set_destination_count(3);
 			_region_data[dest_reg].set_source_region(dest_reg);
-			_region_data[cur_region].set_data_location(region_to_addr(cur_region));
-			dest_addr += words;
-			++cur_region;
-
+			// _region_data[cur_region].set_data_location(region_to_addr(cur_region));
+			
 			char *temp_addr = (char *) dest_addr;
-			printf("Dest reg %s is swpped, so set dest's source to itself.\n", temp_addr);
+			unsigned long long u8_addr = (unsigned long long) temp_addr;
+			printf("Dest reg %llu is swpped, so set dest's source to itself.\n", u8_addr);
+			
+			dest_addr += RegionSize;
+			// ++cur_region;
+
 			continue;
+			
 		}
 		// end for swpness
 
 		// The destination must be set even if the region has no data.
+		// TODO: must be modified! (just for test)
+		// _region_data[cur_region].set_destination(region_to_addr(cur_region));
 		_region_data[cur_region].set_destination(dest_addr);
 
 		if (words > 0) {
 			// If cur_region does not fit entirely into the target space, find a point
 			// at which the source space can be 'split' so that part is copied to the
 			// target space and the rest is copied elsewhere.
+			
+			// TODO: just for test
+			
 			if (dest_addr + words > target_end) {
 				assert(source_next != NULL, "source_next is NULL when splitting");
 				*source_next = summarize_split_space(cur_region, split_info, dest_addr,
 						target_end, target_next);
 				return false;
 			}
+			
 
 			// Compute the destination_count for cur_region, and if necessary, update
 			// source_region for a destination region.  The source_region field is
@@ -952,7 +967,9 @@ bool ParallelCompactData::summarize(SplitInfo& split_info,
 
 			_region_data[cur_region].set_destination_count(destination_count);
 			_region_data[cur_region].set_data_location(region_to_addr(cur_region));
-			dest_addr += words;
+			// TODO: must modify later
+			dest_addr += RegionSize;
+			// dest_addr += words;
 		}
 
 		++cur_region;
@@ -1500,6 +1517,7 @@ PSParallelCompact::first_dead_space_region(const RegionData* beg,
 		RegionData* const middle_ptr = sd.region(middle);
 		HeapWord* const dest = middle_ptr->destination();
 		HeapWord* const addr = sd.region_to_addr(middle);
+		// TODO: just for test
 		assert(dest != NULL, "sanity");
 		assert(dest <= addr, "must move left");
 
@@ -1613,8 +1631,9 @@ PSParallelCompact::compute_dense_prefix(const SpaceId id,
 	// Skip full regions at the beginning of the space--they are necessarily part
 	// of the dense prefix.
 	const RegionData* const full_cp = first_dead_space_region(beg_cp, new_top_cp);
-	assert(full_cp->destination() == sd.region_to_addr(full_cp) ||
-			space->is_empty(), "no dead space allowed to the left");
+	// TODO: ignore assert statement (just for test)
+	// assert(full_cp->destination() == sd.region_to_addr(full_cp) ||
+	//		space->is_empty(), "no dead space allowed to the left");
 	assert(full_cp->data_size() < region_size || full_cp == new_top_cp - 1,
 			"region must have dead space");
 
@@ -3487,6 +3506,7 @@ HeapWord* PSParallelCompact::first_src_addr(HeapWord* const dest_addr,
 
 	// Must skip some live data.
 	size_t words_to_skip = dest_addr - src_region_destination;
+	// TODO: just for test
 	assert(src_region_ptr->data_size() > words_to_skip, "wrong src region");
 
 	if (partial_obj_size >= words_to_skip) {
@@ -3545,7 +3565,8 @@ void PSParallelCompact::decrement_destination_counts(ParCompactionManager* cm,
 			size_t cur_idx = sd.region(cur);
 			HeapWord* cur_addr = sd.region_to_addr(cur_idx);
 			char *temp_addr = (char *) cur_addr;
-			printf("[hjlee-debug] cur_addr %s is swapped object at function decrement_dest_count.\n", temp_addr);
+			unsigned long long u8_addr = (unsigned long long) temp_addr;
+			printf("[hjlee-debug] cur_addr %llu is swapped object at function decrement_dest_count.\n", u8_addr);
 			continue;
 		}
 
@@ -3853,7 +3874,7 @@ void PSParallelCompact::reset_millis_since_last_gc() {
 ParMarkBitMap::IterationStatus MoveAndUpdateClosure::copy_until_full()
 {
 	ParallelCompactData& sd = PSParallelCompact::summary_data();
-	printf("Copy until full\n");
+	// printf("Copy until full\n");
 	if (source() == destination()) {
 		printf("source == destination at util full\n");
 		sd.print_swp_info(source(), destination());
@@ -3880,7 +3901,7 @@ void MoveAndUpdateClosure::copy_partial_obj()
 	// This test is necessary; if omitted, the pointer updates to a partial object
 	// that crosses the dense prefix boundary could be overwritten.
 
-	printf("Copy partial obj\n");
+	// printf("Copy partial obj\n");
 	ParallelCompactData& sd = PSParallelCompact::summary_data();
 	if (source() == destination()) {
 		printf("source == destination at partial\n");
