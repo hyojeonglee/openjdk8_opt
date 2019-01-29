@@ -134,6 +134,7 @@ public:
   // remainder of the source region.
   unsigned int destination_count() const { return _destination_count; }
 
+
   // If a word within the partial object will be written to the first word of a
   // destination region, this is the address of the destination region;
   // otherwise this is NULL.
@@ -329,7 +330,10 @@ public:
     inline void decrement_destination_count();
     inline bool claim();
 
-    
+    // TODO: for swpness
+    inline void set_swpness(double swpness);
+    inline double get_swpness();
+
   private:
     // The type used to represent object sizes within a region.
     typedef uint region_sz_t;
@@ -350,6 +354,7 @@ public:
     region_sz_t          _partial_obj_size;
     region_sz_t volatile _dc_and_los;
     bool                 _blocks_filled;
+    double		 _swpness;
 
 #ifdef ASSERT
     size_t               _blocks_filled_count;   // Number of block table fills.
@@ -390,6 +395,7 @@ public:
   int pid() const { return _pid; }
   // for swpness check
   void print_swp_info(HeapWord* source, HeapWord* destination);
+  bool is_source_swpped(HeapWord* source);
 
   size_t region_count() const { return _region_count; }
   size_t reserved_byte_size() const { return _reserved_byte_size; }
@@ -533,6 +539,17 @@ ParallelCompactData::RegionData::set_blocks_filled()
   _blocks_filled = true;
   // Debug builds count the number of times the table was filled.
   DEBUG_ONLY(Atomic::inc_ptr(&_blocks_filled_count));
+}
+
+// TODO: for swpness
+inline void ParallelCompactData::RegionData::set_swpness(double swpness)
+{
+	_swpness = swpness;
+}
+
+inline double ParallelCompactData::RegionData::get_swpness()
+{
+	return _swpness;
 }
 
 inline void
@@ -1292,6 +1309,10 @@ class PSParallelCompact : AllStatic {
                                            SpaceId src_space_id,
                                            size_t beg_region,
                                            HeapWord* end_addr);
+
+  // TODO: for swpness
+  static double get_swpness();
+  static void set_swpness(double swpness);
 
   // Fill a region, copying objects from one or more source regions.
   static void fill_region(ParCompactionManager* cm, size_t region_idx);

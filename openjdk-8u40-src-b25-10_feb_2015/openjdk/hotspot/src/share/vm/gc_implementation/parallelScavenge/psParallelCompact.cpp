@@ -713,6 +713,17 @@ ParallelCompactData::summarize_split_space(size_t src_region,
 	return source_next;
 }
 
+// hjlee: for swpness of each region, need getter.
+bool ParallelCompactData::is_source_swpped(HeapWord* source)
+{
+	double temp = _region_data[addr_to_region_idx(source)].get_swpness();
+	if (temp > 0)
+		return true;
+	else
+		return false;
+}
+
+
 // hjlee: need to check swpped region at copy function
 void ParallelCompactData::print_swp_info(HeapWord* source, HeapWord* destination)
 {
@@ -862,30 +873,25 @@ bool ParallelCompactData::summarize(SplitInfo& split_info,
 		char *temp_beg = (char *) cur_beg;
 		char *temp_end = (char *) cur_end;
 		swpness = cal_swpness_1(pid, temp_beg, temp_end);
+		// TODO: set swpness to RegionData class.
+		_region_data[cur_region].set_swpness(swpness);
+		
+		// for test
+		// double temp = _region_data[cur_region].get_swpness();
+		// printf("Test swpness set/getter: %f\n", temp);
 		
 		clock_gettime(CLOCK_MONOTONIC, &local_time1[1]);
 		calclock(local_time1, &total_time1, &total_count1);
 
-
-		// Attempt (1) Just skip when "swpness > 0".
 		if (swpness > 0) {
-
-			// hjlee:
-			// Reason why using cur_region in set_destination:
-			// in void MoveAndUpdateClosure::copy_partial_obj(),
-			// there are some codes like below:
-			// if (source() != destination()) {
-			//	Do copy...
-			// }
-
-			_region_data[cur_region].set_destination(region_to_addr(cur_region));
+			// TODO: below set_dest_count doesn't work well.
 			_region_data[cur_region].set_destination_count(3);
-			_region_data[cur_region].set_source_region(cur_region);
-			// _region_data[cur_region].set_data_location(region_to_addr(cur_region));
-			// dest_addr += words;
+			_region_data[cur_region].set_data_location(region_to_addr(cur_region));
+			_region_data[cur_region].set_destination(dest_addr);
 			++cur_region;
 			continue;
 		}
+		
 // end for swpness
 		
 		// The destination must be set even if the region has no data.
@@ -2110,6 +2116,7 @@ void PSParallelCompact::summary_phase(ParCompactionManager* cm,
 	// TODO: useless change
 	// added by charlie 0909
 	summarize_spaces_quick(cm->tid);
+	printf("[End] Summarize\n");
 
 	if (TraceParallelOldGCSummaryPhase) {
 		tty->print_cr("summary_phase:  after summarizing each space to self");
@@ -2141,6 +2148,7 @@ void PSParallelCompact::summary_phase(ParCompactionManager* cm,
 
 	// Old generations.
 	summarize_space(old_space_id, maximum_compaction);
+	printf("[End] Summarize with dense prefix\n");
 
 	// Summarize the remaining spaces in the young gen.  The initial target space
 	// is the old gen.  If a space does not fit entirely into the target, then the
@@ -3218,6 +3226,7 @@ void PSParallelCompact::write_block_fill_histogram(outputStream* const out)
 }
 #endif // #ifdef ASSERT
 
+// TODO: hjlee
 void PSParallelCompact::compact() {
 	// trace("5");
 	GCTraceTime tm("compaction phase", print_phases(), true, &_gc_timer, _gc_tracer.gc_id());
@@ -3231,6 +3240,9 @@ void PSParallelCompact::compact() {
 	TaskQueueSetSuper* qset = ParCompactionManager::region_array();
 	ParallelTaskTerminator terminator(active_gc_threads, qset);
 
+	// TODO: hjlee
+	// draining tasks and stealing tasks
+	// 여기서 region stack (이것들의 리스트는 region list)에 enqueue함
 	GCTaskQueue* q = GCTaskQueue::create();
 	enqueue_region_draining_tasks(q, active_gc_threads);
 	enqueue_dense_prefix_tasks(q, active_gc_threads);
@@ -3536,9 +3548,12 @@ void PSParallelCompact::decrement_destination_counts(ParCompactionManager* cm,
 
 		// TODO by hjlee
 		// Swapped live region can't become available.
-		if (cur->destination_count() == 3) {
+/*
+		if (cur->get_swpness() > 0) {
+			printf("[decrement_dest_count] Do not push swpped region.\n");
 		 	continue;
 		}
+*/		
 
 		cur->decrement_destination_count();
 		if (cur < enqueue_end && cur->available() && cur->claim()) {
@@ -3840,16 +3855,22 @@ void PSParallelCompact::reset_millis_since_last_gc() {
 	_time_of_last_gc = os::javaTimeNanos() / NANOSECS_PER_MILLISEC;
 }
 
-// hjlee: Need to check
 ParMarkBitMap::IterationStatus MoveAndUpdateClosure::copy_until_full()
 {
+	// TODO: for swpness
 	ParallelCompactData& sd = PSParallelCompact::summary_data();
-	if (source() == destination()) {
-		sd.print_swp_info(source(), destination());
-	}
-	if (source() != destination()) {
-		DEBUG_ONLY(PSParallelCompact::check_new_location(source(), destination());)
-			Copy::aligned_conjoint_words(source(), destination(), words_remaining());
+	// Get swpness of source()
+	// if source().swpness > 0 then
+	//	sd.print_swp_info(source(), destination());
+	//	return ???
+	if (sd.is_source_swpped(source()) == true) {
+		// sd.print_swp_info(source(), destination());
+		printf("[copy_until_full] source is swpped out.\n");
+	} else {
+		if (source() != destination()) {
+			DEBUG_ONLY(PSParallelCompact::check_new_location(source(), destination());)
+				Copy::aligned_conjoint_words(source(), destination(), words_remaining());
+		}
 	}
 	update_state(words_remaining());
 	assert(is_full(), "sanity");
@@ -3869,13 +3890,20 @@ void MoveAndUpdateClosure::copy_partial_obj()
 	// This test is necessary; if omitted, the pointer updates to a partial object
 	// that crosses the dense prefix boundary could be overwritten.
 	
+	// TODO: for swpness
 	ParallelCompactData& sd = PSParallelCompact::summary_data();
-	if (source() == destination()) {
-		sd.print_swp_info(source(), destination());
-	}
-	if (source() != destination()) {
-		DEBUG_ONLY(PSParallelCompact::check_new_location(source(), destination());)
-			Copy::aligned_conjoint_words(source(), destination(), words);
+	// Get swpness of source()
+	// if source().swpness > 0 then
+	//	sd.print_swp_info(source(), destination());
+	//	return ???
+	if (sd.is_source_swpped(source()) == true) {
+		// sd.print_swp_info(source(), destination());
+		printf("[copy_partial_obj] source is swpped out.\n");
+	} else {
+		if (source() != destination()) {
+			DEBUG_ONLY(PSParallelCompact::check_new_location(source(), destination());)
+				Copy::aligned_conjoint_words(source(), destination(), words);
+		}
 	}
 	update_state(words);
 }
