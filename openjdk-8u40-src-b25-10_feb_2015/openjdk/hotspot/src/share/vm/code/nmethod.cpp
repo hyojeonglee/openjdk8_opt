@@ -2726,6 +2726,7 @@ void nmethod::verify() {
 
   VerifyOopsClosure voc(this);
   oops_do(&voc);
+  // hjlee
   assert(voc.ok(), "embedded oops must be OK");
   verify_scavenge_root_oops();
 

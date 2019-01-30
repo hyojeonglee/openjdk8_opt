@@ -732,7 +732,7 @@ void ParallelCompactData::print_swp_info(HeapWord* source, HeapWord* destination
 }
 
 // old version
-bool ParallelCompactData::summarize(SplitInfo& split_info,
+bool ParallelCompactData::summarize_old(SplitInfo& split_info,
 		HeapWord* source_beg, HeapWord* source_end,
 		HeapWord** source_next,
 		HeapWord* target_beg, HeapWord* target_end,
@@ -749,10 +749,8 @@ bool ParallelCompactData::summarize(SplitInfo& split_info,
 	size_t cur_region = addr_to_region_idx(source_beg);
 	const size_t end_region = addr_to_region_idx(region_align_up(source_end));
 
-	// getpid(): using GC thread's tid
 	pid_t raw_pid = getpid();
 	int pid = (int) raw_pid;
-	//int tid = syscall(SYS_gettid);
 	size_t RegionSize = ParallelCompactData::RegionSize;
 
 	HeapWord *dest_addr = target_beg;
@@ -836,7 +834,7 @@ bool ParallelCompactData::summarize(SplitInfo& split_info,
 		HeapWord* source_beg, HeapWord* source_end,
 		HeapWord** source_next,
 		HeapWord* target_beg, HeapWord* target_end,
-		HeapWord** target_next, int tid)
+		HeapWord** target_next)
 {
 	if (TraceParallelOldGCSummaryPhase) {
 		HeapWord* const source_next_val = source_next == NULL ? NULL : *source_next;
@@ -854,7 +852,7 @@ bool ParallelCompactData::summarize(SplitInfo& split_info,
 	int pid = ParallelCompactData::pid();
 
 	HeapWord *dest_addr = target_beg;
-	double swpness;
+	double swpness = 0;
 	while (cur_region < end_region) {
 		// The destination must be set even if the region has no data.
 		// _region_data[cur_region].set_destination(dest_addr);
@@ -862,7 +860,6 @@ bool ParallelCompactData::summarize(SplitInfo& split_info,
 		size_t words = _region_data[cur_region].data_size();
 		
 		struct timespec local_time1[2];
-
 // for swpness
 		clock_gettime(CLOCK_MONOTONIC, &local_time1[0]);
 		
@@ -884,16 +881,12 @@ bool ParallelCompactData::summarize(SplitInfo& split_info,
 		calclock(local_time1, &total_time1, &total_count1);
 
 		if (swpness > 0) {
-			// TODO: below set_dest_count doesn't work well.
-			_region_data[cur_region].set_destination_count(3);
+			_region_data[cur_region].set_destination_count(0);
 			_region_data[cur_region].set_data_location(region_to_addr(cur_region));
 			_region_data[cur_region].set_destination(dest_addr);
-			++cur_region;
-			continue;
+			// continue;	
 		}
-		
 // end for swpness
-		
 		// The destination must be set even if the region has no data.
 		_region_data[cur_region].set_destination(dest_addr);
 
@@ -901,7 +894,9 @@ bool ParallelCompactData::summarize(SplitInfo& split_info,
 			// If cur_region does not fit entirely into the target space, find a point
 			// at which the source space can be 'split' so that part is copied to the
 			// target space and the rest is copied elsewhere.
-			if (dest_addr + words > target_end) {
+			// TODO: hjlee add condition
+			// if ((dest_addr + words > target_end) && (swpness == 0)) {
+			if ((dest_addr + words > target_end)) {
 				assert(source_next != NULL, "source_next is NULL when splitting");
 				*source_next = summarize_split_space(cur_region, split_info, dest_addr,
 						target_end, target_next);
@@ -1882,7 +1877,7 @@ PSParallelCompact::provoke_split(bool & max_compaction)
 	}
 }
 #endif // #ifndef PRODUCT
-
+/*
 void PSParallelCompact::summarize_spaces_quick()
 {
 	for (unsigned int i = 0; i < last_space_id; ++i) {
@@ -1900,15 +1895,16 @@ void PSParallelCompact::summarize_spaces_quick()
 	}
 #endif // #ifndef PRODUCT
 }
+*/
 //added by charlie 0909
-void PSParallelCompact::summarize_spaces_quick(int tid)
+void PSParallelCompact::summarize_spaces_quick()
 {
 	for (unsigned int i = 0; i < last_space_id; ++i) {
 		const MutableSpace* space = _space_info[i].space();
 		HeapWord** nta = _space_info[i].new_top_addr();
 		bool result = _summary_data.summarize(_space_info[i].split_info(),
 				space->bottom(), space->top(), NULL,
-				space->bottom(), space->end(), nta, tid);
+				space->bottom(), space->end(), nta);
 		assert(result, "space must fit into itself");
 		_space_info[i].set_dense_prefix(space->bottom());
 	}
@@ -2033,17 +2029,12 @@ PSParallelCompact::summarize_space(SpaceId id, bool maximum_compaction)
 
 			// Compute the destination of each Region, and thus each object.
 			// TODO: hjlee
-			// use newest summarize version
-			// parameter tid is useless, so just pass 0.
 			_summary_data.summarize_dense_prefix(space->bottom(), dense_prefix_end);
 			
-			printf("[hjlee-debug] second summarization with dense prefix triggered.\n");
-			
-			_summary_data.summarize(_space_info[id].split_info(),
+			_summary_data.summarize_old(_space_info[id].split_info(),
 					dense_prefix_end, space->top(), NULL,
 					dense_prefix_end, space->end(),
-					_space_info[id].new_top_addr(),
-					0);
+					_space_info[id].new_top_addr());
 		}
 	}
 
@@ -2106,18 +2097,12 @@ void PSParallelCompact::summary_phase(ParCompactionManager* cm,
 #endif  // #ifdef ASSERT
 
 	// Quick summarization of each space into itself, to see how much is live.
-	// 1-hjlee. 각 space의 liveness를 빠르게 요약
-	// 현재, 이 부분에서 swpness를 계산한다
 	
 	// old version:
-	// summarize_spaces_quick();
+	printf("[start] 1-summarize_spaces_quick at %s\n", __func__);
+	summarize_spaces_quick();
+	printf("[end] 1-summarize_spaces_quick at %s\n", __func__);
 	
-	// Changed point: use other version of summarize_spaces_quick
-	// TODO: useless change
-	// added by charlie 0909
-	summarize_spaces_quick(cm->tid);
-	printf("[End] Summarize\n");
-
 	if (TraceParallelOldGCSummaryPhase) {
 		tty->print_cr("summary_phase:  after summarizing each space to self");
 		Universe::print();
@@ -2147,13 +2132,16 @@ void PSParallelCompact::summary_phase(ParCompactionManager* cm,
 #endif // #ifndef PRODUCT
 
 	// Old generations.
+	printf("[start] 2-summarize_space at %s\n", __func__);
 	summarize_space(old_space_id, maximum_compaction);
-	printf("[End] Summarize with dense prefix\n");
-
+	printf("[end] 2-summarize_space at %s\n", __func__);
+	
 	// Summarize the remaining spaces in the young gen.  The initial target space
 	// is the old gen.  If a space does not fit entirely into the target, then the
 	// remainder is compacted into the space itself and that space becomes the new
 	// target.
+	
+	printf("[start] 3-summarize_young_gen at %s\n", __func__);
 	SpaceId dst_space_id = old_space_id;
 	HeapWord* dst_space_end = old_space->end();
 	HeapWord** new_top_addr = _space_info[dst_space_id].new_top_addr();
@@ -2204,7 +2192,8 @@ void PSParallelCompact::summary_phase(ParCompactionManager* cm,
 				assert(*new_top_addr <= space->top(), "usage should not grow");
 			}
 	}
-
+	printf("[end] 3-summarize_young_gen at %s\n", __func__);
+	
 	if (TraceParallelOldGCSummaryPhase) {
 		tty->print_cr("summary_phase:  after final summarization");
 		Universe::print();
@@ -2213,8 +2202,8 @@ void PSParallelCompact::summary_phase(ParCompactionManager* cm,
 			NOT_PRODUCT(print_generic_summary_data(_summary_data, _space_info));
 		}
 	}
-	// for time test
-	printf("[summarize] total_time1: %llu\n", total_time1);
+	// TODO: for time test swpness module
+	// printf("[summarize] total_time1: %llu\n", total_time1);
 }
 
 // This method should contain all heap-specific policy for invoking a full
@@ -2250,29 +2239,6 @@ void PSParallelCompact::invoke(bool maximum_heap_compaction) {
 
 	PSParallelCompact::invoke_no_policy(clear_all_soft_refs ||
 			maximum_heap_compaction);
-}
-//added by charlie 0909, add tid for swapness check
-void PSParallelCompact::invoke(bool maximum_heap_compaction, int tid) {
-	assert(SafepointSynchronize::is_at_safepoint(), "should be at safepoint");
-	assert(Thread::current() == (Thread*)VMThread::vm_thread(),
-			"should be in vm thread");
-
-	ParallelScavengeHeap* heap = gc_heap();
-	GCCause::Cause gc_cause = heap->gc_cause();
-	assert(!heap->is_gc_active(), "not reentrant");
-
-	PSAdaptiveSizePolicy* policy = heap->size_policy();
-	IsGCActiveMark mark;
-
-	if (ScavengeBeforeFullGC) {
-		PSScavenge::invoke_no_policy();
-	}
-
-	const bool clear_all_soft_refs =
-		heap->collector_policy()->should_clear_all_soft_refs();
-
-	PSParallelCompact::invoke_no_policy(clear_all_soft_refs ||
-			maximum_heap_compaction, tid);
 }
 
 // This method contains no policy. You should probably
@@ -2316,7 +2282,10 @@ bool PSParallelCompact::invoke_no_policy(bool maximum_heap_compaction) {
 	// Make sure data structures are sane, make the heap parsable, and do other
 	// miscellaneous bookkeeping.
 	PreGCValues pre_gc_values;
+	
+	printf("[start] 4-pre_compact at %s\n", __func__);
 	pre_compact(&pre_gc_values);
+	printf("[end] 4-pre_compact at %s\n", __func__);
 
 	// Get the compaction manager reserved for the VM thread.
 	ParCompactionManager* const vmthread_cm =
@@ -2370,12 +2339,17 @@ bool PSParallelCompact::invoke_no_policy(bool maximum_heap_compaction) {
 		adjust_roots();
 
 		compaction_start.update();
+		printf("[start] 5-compact at %s\n", __func__);
 		compact();
-
+		printf("[end] 5-compact at %s\n", __func__);
+		
 		// Reset the mark bitmap, summary data, and do other bookkeeping.  Must be
 		// done before resizing.
+		
+		printf("[start] 6-post_compact at %s\n", __func__);
 		post_compact();
-
+		printf("[end] 6-post_compact at %s\n", __func__);
+		
 		// Let the size policy know we're done
 		size_policy->major_collection_end(old_gen->used_in_bytes(), gc_cause);
 
@@ -2533,263 +2507,6 @@ bool PSParallelCompact::invoke_no_policy(bool maximum_heap_compaction) {
 	return true;
 }
 
-bool PSParallelCompact::invoke_no_policy(bool maximum_heap_compaction, int tid) {
-	assert(SafepointSynchronize::is_at_safepoint(), "must be at a safepoint");
-	assert(ref_processor() != NULL, "Sanity");
-
-	if (GC_locker::check_active_before_gc()) {
-		return false;
-	}
-
-	ParallelScavengeHeap* heap = gc_heap();
-
-	_gc_timer.register_gc_start();
-	_gc_tracer.report_gc_start(heap->gc_cause(), _gc_timer.gc_start());
-
-	TimeStamp marking_start;
-	TimeStamp compaction_start;
-	TimeStamp collection_exit;
-
-	GCCause::Cause gc_cause = heap->gc_cause();
-	PSYoungGen* young_gen = heap->young_gen();
-	PSOldGen* old_gen = heap->old_gen();
-	PSAdaptiveSizePolicy* size_policy = heap->size_policy();
-
-	// The scope of casr should end after code that can change
-	// CollectorPolicy::_should_clear_all_soft_refs.
-	ClearedAllSoftRefs casr(maximum_heap_compaction,
-			heap->collector_policy());
-
-	if (ZapUnusedHeapArea) {
-		// Save information needed to minimize mangling
-		heap->record_gen_tops_before_GC();
-	}
-
-	heap->pre_full_gc_dump(&_gc_timer);
-
-	_print_phases = PrintGCDetails && PrintParallelOldGCPhaseTimes;
-
-	// Make sure data structures are sane, make the heap parsable, and do other
-	// miscellaneous bookkeeping.
-	PreGCValues pre_gc_values;
-	pre_compact(&pre_gc_values);
-
-	// Get the compaction manager reserved for the VM thread.
-	ParCompactionManager* const vmthread_cm =
-		ParCompactionManager::manager_array(gc_task_manager()->workers());
-	//added by charlie 0909
-	vmthread_cm->tid = tid;
-
-	// Place after pre_compact() where the number of invocations is incremented.
-	AdaptiveSizePolicyOutput(size_policy, heap->total_collections());
-
-	{
-		ResourceMark rm;
-		HandleMark hm;
-
-		// Set the number of GC threads to be used in this collection
-		gc_task_manager()->set_active_gang();
-		gc_task_manager()->task_idle_workers();
-		heap->set_par_threads(gc_task_manager()->active_workers());
-
-		gclog_or_tty->date_stamp(PrintGC && PrintGCDateStamps);
-		TraceCPUTime tcpu(PrintGCDetails, true, gclog_or_tty);
-		GCTraceTime t1(GCCauseString("Full GC", gc_cause), PrintGC, !PrintGCDetails, NULL, _gc_tracer.gc_id());
-		TraceCollectorStats tcs(counters());
-		TraceMemoryManagerStats tms(true /* Full GC */,gc_cause);
-
-		if (TraceGen1Time) accumulated_time()->start();
-
-		// Let the size policy know we're starting
-		size_policy->major_collection_begin();
-
-		CodeCache::gc_prologue();
-		Threads::gc_prologue();
-
-		COMPILER2_PRESENT(DerivedPointerTable::clear());
-
-		ref_processor()->enable_discovery(true /*verify_disabled*/, true /*verify_no_refs*/);
-		ref_processor()->setup_policy(maximum_heap_compaction);
-
-		bool marked_for_unloading = false;
-
-		marking_start.update();
-		marking_phase(vmthread_cm, maximum_heap_compaction, &_gc_tracer);
-
-		bool max_on_system_gc = UseMaximumCompactionOnSystemGC
-			&& gc_cause == GCCause::_java_lang_system_gc;
-		summary_phase(vmthread_cm, maximum_heap_compaction || max_on_system_gc);
-
-		COMPILER2_PRESENT(assert(DerivedPointerTable::is_active(), "Sanity"));
-		COMPILER2_PRESENT(DerivedPointerTable::set_active(false));
-
-		// adjust_roots() updates Universe::_intArrayKlassObj which is
-		// needed by the compaction for filling holes in the dense prefix.
-		adjust_roots();
-
-		compaction_start.update();
-		compact();
-
-		// Reset the mark bitmap, summary data, and do other bookkeeping.  Must be
-		// done before resizing.
-		post_compact();
-
-		// Let the size policy know we're done
-		size_policy->major_collection_end(old_gen->used_in_bytes(), gc_cause);
-
-		if (UseAdaptiveSizePolicy) {
-			if (PrintAdaptiveSizePolicy) {
-				gclog_or_tty->print("AdaptiveSizeStart: ");
-				gclog_or_tty->stamp();
-				gclog_or_tty->print_cr(" collection: %d ",
-						heap->total_collections());
-				if (Verbose) {
-					gclog_or_tty->print("old_gen_capacity: %d young_gen_capacity: %d",
-							old_gen->capacity_in_bytes(), young_gen->capacity_in_bytes());
-				}
-			}
-
-			// Don't check if the size_policy is ready here.  Let
-			// the size_policy check that internally.
-			if (UseAdaptiveGenerationSizePolicyAtMajorCollection &&
-					((gc_cause != GCCause::_java_lang_system_gc) ||
-					 UseAdaptiveSizePolicyWithSystemGC)) {
-				// Calculate optimal free space amounts
-				assert(young_gen->max_size() >
-						young_gen->from_space()->capacity_in_bytes() +
-						young_gen->to_space()->capacity_in_bytes(),
-						"Sizes of space in young gen are out-of-bounds");
-
-				size_t young_live = young_gen->used_in_bytes();
-				size_t eden_live = young_gen->eden_space()->used_in_bytes();
-				size_t old_live = old_gen->used_in_bytes();
-				size_t cur_eden = young_gen->eden_space()->capacity_in_bytes();
-				size_t max_old_gen_size = old_gen->max_gen_size();
-				size_t max_eden_size = young_gen->max_size() -
-					young_gen->from_space()->capacity_in_bytes() -
-					young_gen->to_space()->capacity_in_bytes();
-
-				// Used for diagnostics
-				size_policy->clear_generation_free_space_flags();
-
-				size_policy->compute_generations_free_space(young_live,
-						eden_live,
-						old_live,
-						cur_eden,
-						max_old_gen_size,
-						max_eden_size,
-						true /* full gc*/);
-
-				size_policy->check_gc_overhead_limit(young_live,
-						eden_live,
-						max_old_gen_size,
-						max_eden_size,
-						true /* full gc*/,
-						gc_cause,
-						heap->collector_policy());
-
-				size_policy->decay_supplemental_growth(true /* full gc*/);
-
-				heap->resize_old_gen(
-						size_policy->calculated_old_free_size_in_bytes());
-
-				// Don't resize the young generation at an major collection.  A
-				// desired young generation size may have been calculated but
-				// resizing the young generation complicates the code because the
-				// resizing of the old generation may have moved the boundary
-				// between the young generation and the old generation.  Let the
-				// young generation resizing happen at the minor collections.
-			}
-			if (PrintAdaptiveSizePolicy) {
-				gclog_or_tty->print_cr("AdaptiveSizeStop: collection: %d ",
-						heap->total_collections());
-			}
-		}
-
-		if (UsePerfData) {
-			PSGCAdaptivePolicyCounters* const counters = heap->gc_policy_counters();
-			counters->update_counters();
-			counters->update_old_capacity(old_gen->capacity_in_bytes());
-			counters->update_young_capacity(young_gen->capacity_in_bytes());
-		}
-
-		heap->resize_all_tlabs();
-
-		// Resize the metaspace capactiy after a collection
-		MetaspaceGC::compute_new_size();
-
-		if (TraceGen1Time) accumulated_time()->stop();
-
-		if (PrintGC) {
-			if (PrintGCDetails) {
-				// No GC timestamp here.  This is after GC so it would be confusing.
-				young_gen->print_used_change(pre_gc_values.young_gen_used());
-				old_gen->print_used_change(pre_gc_values.old_gen_used());
-				heap->print_heap_change(pre_gc_values.heap_used());
-				MetaspaceAux::print_metaspace_change(pre_gc_values.metadata_used());
-			} else {
-				heap->print_heap_change(pre_gc_values.heap_used());
-			}
-		}
-
-		// Track memory usage and detect low memory
-		MemoryService::track_memory_usage();
-		heap->update_counters();
-		gc_task_manager()->release_idle_workers();
-	}
-
-#ifdef ASSERT
-	for (size_t i = 0; i < ParallelGCThreads + 1; ++i) {
-		ParCompactionManager* const cm =
-			ParCompactionManager::manager_array(int(i));
-		assert(cm->marking_stack()->is_empty(),       "should be empty");
-		assert(ParCompactionManager::region_list(int(i))->is_empty(), "should be empty");
-	}
-#endif // ASSERT
-
-	if (VerifyAfterGC && heap->total_collections() >= VerifyGCStartAt) {
-		HandleMark hm;  // Discard invalid handles created during verification
-		Universe::verify(" VerifyAfterGC:");
-	}
-
-	// Re-verify object start arrays
-	if (VerifyObjectStartArray &&
-			VerifyAfterGC) {
-		old_gen->verify_object_start_array();
-	}
-
-	if (ZapUnusedHeapArea) {
-		old_gen->object_space()->check_mangled_unused_area_complete();
-	}
-
-	NOT_PRODUCT(ref_processor()->verify_no_references_recorded());
-
-	collection_exit.update();
-
-	heap->print_heap_after_gc();
-	heap->trace_heap_after_gc(&_gc_tracer);
-
-	if (PrintGCTaskTimeStamps) {
-		gclog_or_tty->print_cr("VM-Thread " INT64_FORMAT " " INT64_FORMAT " "
-				INT64_FORMAT,
-				marking_start.ticks(), compaction_start.ticks(),
-				collection_exit.ticks());
-		gc_task_manager()->print_task_time_stamps();
-	}
-
-	heap->post_full_gc_dump(&_gc_timer);
-
-#ifdef TRACESPINNING
-	ParallelTaskTerminator::print_termination_counts();
-#endif
-
-	_gc_timer.register_gc_end();
-
-	_gc_tracer.report_dense_prefix(dense_prefix(old_space_id));
-	_gc_tracer.report_gc_end(_gc_timer.gc_end(), _gc_timer.time_partitions());
-
-	return true;
-}
 bool PSParallelCompact::absorb_live_data_from_eden(PSAdaptiveSizePolicy* size_policy,
 		PSYoungGen* young_gen,
 		PSOldGen* old_gen) {
@@ -3066,7 +2783,13 @@ void PSParallelCompact::enqueue_region_draining_tasks(GCTaskQueue* q,
 			sd.addr_to_region_idx(sd.region_align_up(new_top));
 
 		for (size_t cur = end_region - 1; cur + 1 > beg_region; --cur) {
+			// TODO: need to check swpness
+			double temp_swpness = sd.get_region_data()[cur].get_swpness();
+			// if (temp_swpness > 0)
+			//	printf("[%s] get swpness: %f\n", __func__, temp_swpness);
+
 			if (sd.region(cur)->claim_unsafe()) {
+			// if (sd.region(cur)->claim_unsafe() && temp_swpness == 0) {
 				ParCompactionManager::region_list_push(which, cur);
 
 				if (TraceParallelOldGCCompactionPhase && Verbose) {
@@ -3244,30 +2967,44 @@ void PSParallelCompact::compact() {
 	// draining tasks and stealing tasks
 	// 여기서 region stack (이것들의 리스트는 region list)에 enqueue함
 	GCTaskQueue* q = GCTaskQueue::create();
+	
+	printf("[start] 5-(1)draining_tasks at %s\n", __func__);
 	enqueue_region_draining_tasks(q, active_gc_threads);
+	printf("[end] 5-(1)draining_tasks at %s\n", __func__);
+	
 	enqueue_dense_prefix_tasks(q, active_gc_threads);
+	
+	printf("[start] 5-(2)stealing_tasks at %s\n", __func__);
 	enqueue_region_stealing_tasks(q, &terminator, active_gc_threads);
-
+	printf("[end] 5-(2)stealing_tasks at %s\n", __func__);
+	
 	{
 		GCTraceTime tm_pc("par compact", print_phases(), true, &_gc_timer, _gc_tracer.gc_id());
 
+		printf("[start] 5-(3)execute_and_wait at %s\n", __func__);
 		gc_task_manager()->execute_and_wait(q);
+		printf("[end] 5-(3)execute_and_wait at %s\n", __func__);
 
 #ifdef  ASSERT
+		
+		printf("[start] 5-(4)verify_complete at %s\n", __func__);
 		// Verify that all regions have been processed before the deferred updates.
 		for (unsigned int id = old_space_id; id < last_space_id; ++id) {
 			verify_complete(SpaceId(id));
 		}
+		printf("[end] 5-(4)verify_complete at %s\n", __func__);
 #endif
 	}
 
 	{
 		// Update the deferred objects, if any.  Any compaction manager can be used.
 		GCTraceTime tm_du("deferred updates", print_phases(), true, &_gc_timer, _gc_tracer.gc_id());
+		printf("[start] 5-(5)update_deferred_objects at %s\n", __func__);
 		ParCompactionManager* cm = ParCompactionManager::manager_array(0);
 		for (unsigned int id = old_space_id; id < last_space_id; ++id) {
 			update_deferred_objects(cm, SpaceId(id));
 		}
+		printf("[end] 5-(5)update_deferred_objects at %s\n", __func__);
 	}
 
 	DEBUG_ONLY(write_block_fill_histogram(gclog_or_tty));
@@ -3288,13 +3025,14 @@ void PSParallelCompact::verify_complete(SpaceId space_id) {
 
 	bool issued_a_warning = false;
 
+	// TODO: hjlee ignore warnings
 	size_t cur_region;
 	for (cur_region = beg_region; cur_region < new_top_region; ++cur_region) {
 		const RegionData* const c = sd.region(cur_region);
 		if (!c->completed()) {
-			warning("region " SIZE_FORMAT " not filled:  "
-					"destination_count=" SIZE_FORMAT,
-					cur_region, c->destination_count());
+			// warning("region " SIZE_FORMAT " not filled:  "
+			//		"destination_count=" SIZE_FORMAT,
+			//		cur_region, c->destination_count());
 			issued_a_warning = true;
 		}
 	}
@@ -3302,9 +3040,9 @@ void PSParallelCompact::verify_complete(SpaceId space_id) {
 	for (cur_region = new_top_region; cur_region < old_top_region; ++cur_region) {
 		const RegionData* const c = sd.region(cur_region);
 		if (!c->available()) {
-			warning("region " SIZE_FORMAT " not empty:   "
-					"destination_count=" SIZE_FORMAT,
-					cur_region, c->destination_count());
+			// warning("region " SIZE_FORMAT " not empty:   "
+			//		"destination_count=" SIZE_FORMAT,
+			//		cur_region, c->destination_count());
 			issued_a_warning = true;
 		}
 	}
@@ -3411,10 +3149,23 @@ void PSParallelCompact::update_deferred_objects(ParCompactionManager* cm,
 	const RegionData* cur_region;
 	for (cur_region = beg_region; cur_region < end_region; ++cur_region) {
 		HeapWord* const addr = cur_region->deferred_obj_addr();
+/*
+		// Do not need!
+		// TODO: for swpness
+		ParallelCompactData& sd = PSParallelCompact::summary_data();
+		HeapWord* cur_addr = sd.region_to_addr(cur_region);
+		if (sd.is_source_swpped(cur_addr) == true) {
+			printf("[%s] swpped addr\n", __func__);
+			continue;
+		}
+		// endfor swpness
+*/
 		if (addr != NULL) {
 			if (start_array != NULL) {
 				start_array->allocate_block(addr);
 			}
+			// TODO: below code trigger assert
+			// printf("[%s] update contents\n", __func__);
 			oop(addr)->update_contents(cm);
 			assert(oop(addr)->is_oop_or_null(), "should be an oop now");
 		}
@@ -3548,17 +3299,15 @@ void PSParallelCompact::decrement_destination_counts(ParCompactionManager* cm,
 
 		// TODO by hjlee
 		// Swapped live region can't become available.
-/*
-		if (cur->get_swpness() > 0) {
-			printf("[decrement_dest_count] Do not push swpped region.\n");
-		 	continue;
-		}
-*/		
-
-		cur->decrement_destination_count();
-		if (cur < enqueue_end && cur->available() && cur->claim()) {
-			cm->push_region(sd.region(cur));
-		}
+		// double temp_swpness = cur->get_swpness();
+		// if (temp_swpness > 0) {
+			// printf("[%s] get swpness: %f\n", __func__, temp_swpness);
+		// } else {
+			cur->decrement_destination_count();
+			if (cur < enqueue_end && cur->available() && cur->claim()) {
+				cm->push_region(sd.region(cur));
+			}
+		// }
 	}
 }
 
@@ -3655,6 +3404,16 @@ void PSParallelCompact::fill_region(ParCompactionManager* cm, size_t region_idx)
 	size_t src_region_idx = region_ptr->source_region();
 	SpaceId src_space_id = space_id(sd.region_to_addr(src_region_idx));
 	HeapWord* src_space_top = _space_info[src_space_id].space()->top();
+
+/*
+	// TODO: for swpness (in progress)
+	double temp_swpness_src = sd.get_region_data()[src_region_idx].get_swpness();
+	double temp_swpness_dest = sd.get_region_data()[region_idx].get_swpness();
+	if (temp_swpness_src > 0 || temp_swpness_dest > 0) {
+		printf("[%s] get swpness: src=%f dest=%f so return right now.\n", __func__, temp_swpness_src, temp_swpness_dest);
+	 	return;
+	}
+*/
 
 	MoveAndUpdateClosure closure(bitmap, cm, start_array, dest_addr, words);
 	closure.set_source(first_src_addr(dest_addr, src_space_id, src_region_idx));
@@ -3863,11 +3622,12 @@ ParMarkBitMap::IterationStatus MoveAndUpdateClosure::copy_until_full()
 	// if source().swpness > 0 then
 	//	sd.print_swp_info(source(), destination());
 	//	return ???
-	if (sd.is_source_swpped(source()) == true) {
+	if (sd.is_source_swpped(source()) == true || sd.is_source_swpped(destination()) == true) {
 		// sd.print_swp_info(source(), destination());
-		printf("[copy_until_full] source is swpped out.\n");
+	 	printf("[copy_until_full] source is swpped out. do not copy.\n");
 	} else {
 		if (source() != destination()) {
+			printf("[copy_until_full] do copy.\n");
 			DEBUG_ONLY(PSParallelCompact::check_new_location(source(), destination());)
 				Copy::aligned_conjoint_words(source(), destination(), words_remaining());
 		}
@@ -3896,11 +3656,12 @@ void MoveAndUpdateClosure::copy_partial_obj()
 	// if source().swpness > 0 then
 	//	sd.print_swp_info(source(), destination());
 	//	return ???
-	if (sd.is_source_swpped(source()) == true) {
+	if (sd.is_source_swpped(source()) == true || sd.is_source_swpped(destination()) == true) {
 		// sd.print_swp_info(source(), destination());
-		printf("[copy_partial_obj] source is swpped out.\n");
+		printf("[copy_partial_obj] source is swpped out. do not copy.\n");
 	} else {
 		if (source() != destination()) {
+			printf("[copy_partial_obj] do copy.\n");
 			DEBUG_ONLY(PSParallelCompact::check_new_location(source(), destination());)
 				Copy::aligned_conjoint_words(source(), destination(), words);
 		}

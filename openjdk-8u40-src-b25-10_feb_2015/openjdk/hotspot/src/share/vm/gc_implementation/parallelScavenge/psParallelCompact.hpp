@@ -400,6 +400,9 @@ public:
   size_t region_count() const { return _region_count; }
   size_t reserved_byte_size() const { return _reserved_byte_size; }
 
+  // TODO: for swpness
+  RegionData* get_region_data() const { return _region_data; };
+  
   // Convert region indices to/from RegionData pointers.
   inline RegionData* region(size_t region_idx) const;
   inline size_t     region(const RegionData* const region_ptr) const;
@@ -419,18 +422,18 @@ public:
   HeapWord* summarize_split_space(size_t src_region, SplitInfo& split_info,
                                   HeapWord* destination, HeapWord* target_end,
                                   HeapWord** target_next);
-  bool summarize(SplitInfo& split_info,
+  
+  bool summarize_old(SplitInfo& split_info,
                  HeapWord* source_beg, HeapWord* source_end,
                  HeapWord** source_next,
                  HeapWord* target_beg, HeapWord* target_end,
                  HeapWord** target_next);
 
-  //added by charlie 0909
   bool summarize(SplitInfo& split_info,
                  HeapWord* source_beg, HeapWord* source_end,
                  HeapWord** source_next,
                  HeapWord* target_beg, HeapWord* target_end,
-                 HeapWord** target_next, int tid);
+                 HeapWord** target_next);
 
   void clear();
   void clear_range(size_t beg_region, size_t end_region);
@@ -1141,7 +1144,6 @@ class PSParallelCompact : AllStatic {
 #endif
 
   static void summarize_spaces_quick();
-  static void summarize_spaces_quick(int tid);
   static void summarize_space(SpaceId id, bool maximum_compaction);
   static void summary_phase(ParCompactionManager* cm, bool maximum_compaction);
 
@@ -1207,9 +1209,6 @@ class PSParallelCompact : AllStatic {
 
   static void invoke(bool maximum_heap_compaction);
   static bool invoke_no_policy(bool maximum_heap_compaction);
-//added by charlie 0909
-  static void invoke(bool maximum_heap_compaction, int tid);
-  static bool invoke_no_policy(bool maximum_heap_compaction, int tid);
 
   static void post_initialize();
   // Perform initialization for PSParallelCompact that requires
