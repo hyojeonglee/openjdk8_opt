@@ -25,7 +25,7 @@
 #include "precompiled.hpp"
 #include "compiler/compileBroker.hpp"
 #include "gc_interface/collectedHeap.hpp"
-/* for swpness */ 
+// hjlee: for swpness
 #include "gc_implementation/parallelScavenge/psParallelCompact.hpp"
 
 #include "memory/resourceArea.hpp"

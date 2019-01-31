@@ -330,7 +330,7 @@ public:
     inline void decrement_destination_count();
     inline bool claim();
 
-    // TODO: for swpness
+    // hjlee: for swpness
     inline void set_swpness(double swpness);
     inline double get_swpness();
 
@@ -354,7 +354,7 @@ public:
     region_sz_t          _partial_obj_size;
     region_sz_t volatile _dc_and_los;
     bool                 _blocks_filled;
-    double		 _swpness;
+    double		 _swpness; // hjlee: for swpness
 
 #ifdef ASSERT
     size_t               _blocks_filled_count;   // Number of block table fills.
@@ -391,16 +391,15 @@ public:
   ParallelCompactData();
   bool initialize(MemRegion covered_region);
 
-  // for swpness
+  // hjlee: for swpness
   int pid() const { return _pid; }
-  // for swpness check
   void print_swp_info(HeapWord* source, HeapWord* destination);
   bool is_source_swpped(HeapWord* source);
 
   size_t region_count() const { return _region_count; }
   size_t reserved_byte_size() const { return _reserved_byte_size; }
 
-  // TODO: for swpness
+  // hjlee: for swpness
   RegionData* get_region_data() const { return _region_data; };
   
   // Convert region indices to/from RegionData pointers.
@@ -505,7 +504,7 @@ private:
   BlockData*      _block_data;
   size_t          _block_count;
 
-// for swpness
+// hjlee: for swpness
 private:
   int		  _pid;
 };
@@ -544,7 +543,7 @@ ParallelCompactData::RegionData::set_blocks_filled()
   DEBUG_ONLY(Atomic::inc_ptr(&_blocks_filled_count));
 }
 
-// TODO: for swpness
+// hjlee: for swpness
 inline void ParallelCompactData::RegionData::set_swpness(double swpness)
 {
 	_swpness = swpness;
@@ -1309,7 +1308,7 @@ class PSParallelCompact : AllStatic {
                                            size_t beg_region,
                                            HeapWord* end_addr);
 
-  // TODO: for swpness
+  // hjlee: for swpness
   static double get_swpness();
   static void set_swpness(double swpness);
 
