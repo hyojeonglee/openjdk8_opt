@@ -197,6 +197,8 @@ class SpaceInfo
   void set_dense_prefix(HeapWord* addr)     { _dense_prefix = addr; }
   void set_start_array(ObjectStartArray* s) { _start_array = s; }
 
+  // TODO
+  // hjlee: When _new_top is swpped out, then retry to set new_top (and top).
   void publish_new_top() const              { _space->set_top(_new_top); }
 
  private:
@@ -395,6 +397,7 @@ public:
   int pid() const { return _pid; }
   void print_swp_info(HeapWord* source, HeapWord* destination);
   bool is_source_swpped(HeapWord* source);
+  bool is_source_swpped(RegionData* rd);
 
   size_t region_count() const { return _region_count; }
   size_t reserved_byte_size() const { return _reserved_byte_size; }

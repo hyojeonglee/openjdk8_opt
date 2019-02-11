@@ -87,7 +87,7 @@ double cal_swpness_1(int pid, char *raw_beg, char *raw_end)
 	int pmapf;
 	int tot_cnt = 0;
 	int swp_cnt = 0;
-	int out_of_lru = 0;
+	// int out_of_lru = 0;
 	double swpness = 0;
 
 	sprintf(pmap_path, "/proc/%d/pagemap", pid);
@@ -103,7 +103,7 @@ double cal_swpness_1(int pid, char *raw_beg, char *raw_end)
 	for (vaddr = start_va; vaddr < end_va; vaddr += BASE_PAGE_SIZE) {
 		uint64_t ent = 0;
 		u8 pfn = 0;
-		uint64_t kpflags = 0;
+		// uint64_t kpflags = 0;
 		u8 is_swapped = 0;
 		u8 offset = vaddr >> (BASE_PAGE_SHIFT - 3);
 

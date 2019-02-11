@@ -423,7 +423,7 @@ ParallelCompactData::ParallelCompactData()
 	_block_count = 0;
 
 	// hjlee: for swpness
-	// TODO: can be more simple.
+	// TODO: can be simple.
 	char buffer[256];
 	std::string result = "";
 	FILE* pipe = popen("pidof java", "r");
@@ -720,6 +720,15 @@ bool ParallelCompactData::is_source_swpped(HeapWord* source)
 		return false;
 }
 
+// hjlee
+bool ParallelCompactData::is_source_swpped(RegionData* rd)
+{
+	double temp = rd->get_swpness();
+	if (temp > 0)
+		return true;
+	else
+		return false;
+}
 
 // hjlee: need to check swpped region at copy function
 void ParallelCompactData::print_swp_info(HeapWord* source, HeapWord* destination)
@@ -824,7 +833,8 @@ bool ParallelCompactData::summarize_old(SplitInfo& split_info,
 	return true;
 }
 
-// hjlee: Currently used version. 
+// hjlee: Currently used version.
+// TODO-0210: dest의 source가 되는 것을 막아야함 
 bool ParallelCompactData::summarize(SplitInfo& split_info,
 		HeapWord* source_beg, HeapWord* source_end,
 		HeapWord** source_next,
@@ -876,11 +886,11 @@ bool ParallelCompactData::summarize(SplitInfo& split_info,
 		clock_gettime(CLOCK_MONOTONIC, &local_time1[1]);
 		calclock(local_time1, &total_time1, &total_count1);
 
-		if (swpness > 0) {
-			_region_data[cur_region].set_destination_count(0);
-			_region_data[cur_region].set_data_location(region_to_addr(cur_region));
-			_region_data[cur_region].set_destination(dest_addr);
-		}
+		// if (swpness > 0) {
+		//	_region_data[cur_region].set_destination_count(0);
+		//	_region_data[cur_region].set_data_location(region_to_addr(cur_region));
+		//	_region_data[cur_region].set_destination(dest_addr);
+		// }
 // hjlee: end for swpness
 		
 		// The destination must be set even if the region has no data.
@@ -1890,7 +1900,7 @@ void PSParallelCompact::summarize_spaces_quick()
 #endif // #ifndef PRODUCT
 }
 */
-//added by charlie 0909
+
 void PSParallelCompact::summarize_spaces_quick()
 {
 	for (unsigned int i = 0; i < last_space_id; ++i) {
@@ -2940,7 +2950,6 @@ void PSParallelCompact::write_block_fill_histogram(outputStream* const out)
 
 // TODO: hjlee
 void PSParallelCompact::compact() {
-	// trace("5");
 	GCTraceTime tm("compaction phase", print_phases(), true, &_gc_timer, _gc_tracer.gc_id());
 
 	ParallelScavengeHeap* heap = (ParallelScavengeHeap*)Universe::heap();
@@ -3133,12 +3142,25 @@ void PSParallelCompact::update_deferred_objects(ParCompactionManager* cm,
 	HeapWord* const beg_addr = space_info->dense_prefix();
 	HeapWord* const end_addr = sd.region_align_up(space_info->new_top());
 
-	const RegionData* const beg_region = sd.addr_to_region_ptr(beg_addr);
-	const RegionData* const end_region = sd.addr_to_region_ptr(end_addr);
-	const RegionData* cur_region;
+	// hjlee: Remove 'const' at below 3 lines.
+	RegionData* const beg_region = sd.addr_to_region_ptr(beg_addr);
+	RegionData* const end_region = sd.addr_to_region_ptr(end_addr);
+	RegionData* cur_region;
 	for (cur_region = beg_region; cur_region < end_region; ++cur_region) {
+		// hjlee: When executing DL4J, it causes problem that
+		// 'assert(!is_null(v)) failed. narrow klass value can never be
+		// zero'
+		// So, need to pass when cur_region's swpness is bigger than
+		// zero.
+		if (sd.is_source_swpped(cur_region) == true) {
+			// hjlee: for debug
+			printf("[%s] cur_region is swpped out, so pass to check deferred object.\n", __func__);
+			++cur_region;
+			continue;
+		}
+
 		HeapWord* const addr = cur_region->deferred_obj_addr();
-		
+	
 		if (addr != NULL) {
 			if (start_array != NULL) {
 				start_array->allocate_block(addr);
@@ -3376,6 +3398,8 @@ void PSParallelCompact::fill_region(ParCompactionManager* cm, size_t region_idx)
 	SpaceId src_space_id = space_id(sd.region_to_addr(src_region_idx));
 	HeapWord* src_space_top = _space_info[src_space_id].space()->top();
 
+	// hjlee: region_idx is dest's and src_region_idx is source's.
+
 	MoveAndUpdateClosure closure(bitmap, cm, start_array, dest_addr, words);
 	closure.set_source(first_src_addr(dest_addr, src_space_id, src_region_idx));
 
@@ -3583,7 +3607,7 @@ ParMarkBitMap::IterationStatus MoveAndUpdateClosure::copy_until_full()
 	if (sd.is_source_swpped(source()) == true || sd.is_source_swpped(destination()) == true) {
 		// hjlee: for debug
 		// sd.print_swp_info(source(), destination());
-	 	printf("[%s] source is swpped out. do not copy.\n", __func__);
+	 	printf("[%s] region is swpped out. do not copy.\n", __func__);
 	} else {
 		if (source() != destination()) {
 			// hjlee: for debug
@@ -3616,7 +3640,7 @@ void MoveAndUpdateClosure::copy_partial_obj()
 	if (sd.is_source_swpped(source()) == true || sd.is_source_swpped(destination()) == true) {
 		// hjlee: for debug
 		// sd.print_swp_info(source(), destination());
-		printf("[%s] source is swpped out. do not copy.\n", __func__);
+		printf("[%s] region is swpped out. do not copy.\n", __func__);
 	} else {
 		if (source() != destination()) {
 			// hjlee: for debug
