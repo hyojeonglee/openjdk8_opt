@@ -859,6 +859,7 @@ bool ParallelCompactData::summarize(SplitInfo& split_info,
 	HeapWord *dest_addr = target_beg;
 	double swpness = 0;
 	while (cur_region < end_region) {
+		// Original codes
 		// The destination must be set even if the region has no data.
 		// _region_data[cur_region].set_destination(dest_addr);
 		// words is live data size of cur_region
@@ -886,11 +887,12 @@ bool ParallelCompactData::summarize(SplitInfo& split_info,
 		clock_gettime(CLOCK_MONOTONIC, &local_time1[1]);
 		calclock(local_time1, &total_time1, &total_count1);
 
-		// if (swpness > 0) {
+		if (swpness > 0) {
+		//	Currently, do nothing.
 		//	_region_data[cur_region].set_destination_count(0);
 		//	_region_data[cur_region].set_data_location(region_to_addr(cur_region));
-		//	_region_data[cur_region].set_destination(dest_addr);
-		// }
+		//	_region_data[cur_region].set_destination(cur_beg);
+		}
 // hjlee: end for swpness
 		
 		// The destination must be set even if the region has no data.
@@ -2101,8 +2103,6 @@ void PSParallelCompact::summary_phase(ParCompactionManager* cm,
 #endif  // #ifdef ASSERT
 
 	// Quick summarization of each space into itself, to see how much is live.
-	
-	// old version:
 	printf("[start] 1-summarize_spaces_quick at %s\n", __func__);
 	summarize_spaces_quick();
 	printf("[end] 1-summarize_spaces_quick at %s\n", __func__);
@@ -3152,12 +3152,14 @@ void PSParallelCompact::update_deferred_objects(ParCompactionManager* cm,
 		// zero'
 		// So, need to pass when cur_region's swpness is bigger than
 		// zero.
+#if 0
 		if (sd.is_source_swpped(cur_region) == true) {
 			// hjlee: for debug
 			printf("[%s] cur_region is swpped out, so pass to check deferred object.\n", __func__);
 			++cur_region;
 			continue;
 		}
+#endif
 
 		HeapWord* const addr = cur_region->deferred_obj_addr();
 	
