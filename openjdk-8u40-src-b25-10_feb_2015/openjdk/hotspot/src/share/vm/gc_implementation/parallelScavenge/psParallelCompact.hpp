@@ -437,6 +437,12 @@ public:
                  HeapWord* target_beg, HeapWord* target_end,
                  HeapWord** target_next);
 
+  bool summarize_for_top(SplitInfo& split_info,
+                 HeapWord* source_beg, HeapWord* source_end,
+                 HeapWord** source_next,
+                 HeapWord* target_beg, HeapWord* target_end,
+                 HeapWord** target_next);
+
   void clear();
   void clear_range(size_t beg_region, size_t end_region);
   void clear_range(HeapWord* beg, HeapWord* end) {

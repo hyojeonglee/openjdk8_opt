@@ -196,16 +196,33 @@ void ParCompactionManager::follow_marking_stacks() {
   assert(marking_stacks_empty(), "Sanity");
 }
 
+// DOING
+// hjlee: need to pass region which swpness > 0
 void ParCompactionManager::drain_region_stacks() {
+  typedef ParallelCompactData::RegionData RegionData;
+  ParallelCompactData& sd = PSParallelCompact::summary_data();
+
   do {
     // Drain overflow stack first so other threads can steal.
     size_t region_index;
     while (region_stack()->pop_overflow(region_index)) {
-      PSParallelCompact::fill_and_update_region(this, region_index);
+      RegionData* region_ptr = sd.region(region_index);
+      size_t region_index_src = region_ptr->source_region();
+      HeapWord *dest_reg = sd.region_to_addr(region_index);
+      HeapWord *src_reg = sd.region_to_addr(region_index_src);
+
+      if (sd.is_source_swpped(dest_reg) == false && sd.is_source_swpped(src_reg) == false)
+	PSParallelCompact::fill_and_update_region(this, region_index);
     }
 
     while (region_stack()->pop_local(region_index)) {
-      PSParallelCompact::fill_and_update_region(this, region_index);
+      RegionData* region_ptr = sd.region(region_index);
+      size_t region_index_src = region_ptr->source_region();
+      HeapWord *dest_reg = sd.region_to_addr(region_index);
+      HeapWord *src_reg = sd.region_to_addr(region_index_src);
+
+      if (sd.is_source_swpped(dest_reg) == false && sd.is_source_swpped(src_reg) == false)
+	PSParallelCompact::fill_and_update_region(this, region_index);
     }
   } while (!region_stack()->is_empty());
 }
